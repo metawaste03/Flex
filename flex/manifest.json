@@ -2,7 +2,7 @@
   "name": "FLEX",
   "short_name": "FLEX",
   "description": "Paste a YouTube link, play it back on an iPod-style click wheel.",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
