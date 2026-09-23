@@ -72,7 +72,7 @@ To install on Android once hosted:
 
 To share with friends: send them the URL; they do the same "Add to Home Screen" step themselves.
 
-**Deploying from GitHub:** the app lives in the `flex/` folder of the repo. If the Cloudflare Pages project is connected to the GitHub repo, set **Build command** to empty and **Build output directory** to `flex`; every push to the production branch (`main`) then deploys automatically, and pushes to other branches get their own preview URL. If the project was created by drag-and-drop instead, it does not watch GitHub — upload the contents of `flex/` again after each change (or recreate the project as a Git-connected one).
+**Deploying from GitHub:** the app lives in the `flex/` folder of the repo. The Cloudflare project (**Workers**, named `flex`) is connected to the GitHub repo, and `wrangler.jsonc` at the repo root tells it to serve `flex/` as static files — no build step, no server code. Every push to `main` deploys to production; pushes to other branches/PRs run a build check (and preview, if enabled). If the Cloudflare project is ever renamed, update `"name"` in `wrangler.jsonc` to match. (A Cloudflare **Pages** project would instead need Build command empty and Build output directory `flex`; a drag-and-drop project doesn't watch GitHub at all.)
 
 `manifest.json` uses relative `start_url`/`scope` (`./`), so the app installs correctly whether it's served from a domain root (`*.pages.dev`) or a subfolder (e.g. GitHub Pages at `/Flex/`).
 
