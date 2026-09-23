@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flex-shell-v1';
+const CACHE_NAME = 'flex-shell-v2';
 const SHELL_FILES = [
   './',
   './index.html',

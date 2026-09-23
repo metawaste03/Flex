@@ -73,6 +73,20 @@ To install on Android once hosted:
 
 To share with friends: send them the URL; they do the same "Add to Home Screen" step themselves.
 
+## 8a. Milestone 2 — playlists, media controls, full-screen skin (implemented)
+
+Built on top of the working MVP (confirmed: audio survives screen lock and app backgrounding on Android/Brave):
+
+- **Playlists**: create, view, add a YouTube link to a specific playlist (Menu → Playlists → pick one → + Add Song), and play any track in one (sets it as the active queue).
+- **Reorder**: a "Reorder" toggle in a playlist's track list turns on drag handles (☰); drag rows to reorder, order is saved on drop. Playlists themselves are not yet reorderable — tracks within a playlist are.
+- **Media controls**: proper next/previous track (not just seek), play/pause, and a three-state repeat mode (Off / Repeat All / Repeat One) set from Settings. Previous also restarts the current track if more than 3 seconds in, matching real iPod/media-player behavior.
+- **Full-screen layout**: the device now fills the entire viewport (`100dvw`/`100dvh`) with safe-area padding for notches, rather than sitting as a small card on a dark background.
+- **Wheel sound + haptics**: synthesized click-wheel "tick" sound (Web Audio, no external audio files) on every scroll detent and a lower "thock" on every button press, paired with `navigator.vibrate()` haptic pulses. Audio context is created lazily on first touch to satisfy browser autoplay policy.
+- **Wheel gestures unified**: dragging around the ring scrolls the highlighted item in list screens (menu/playlists/playlist detail/settings) and adjusts volume on the Now Playing screen — same physical gesture, context-dependent action, matching the real device. Side buttons (◀◀/▶▶) do a quick-tap for previous/next track, or a press-and-hold for continuous seek.
+- **Skin toggle**: Settings → Skin switches between a white/silver body and a black body via CSS custom properties (`data-skin` attribute), persisted to `localStorage`.
+- **Persistence**: playlists, skin choice, and repeat mode are saved to `localStorage` under a single `flex_state_v1` key and reloaded on launch.
+- Cache-busting reminder: the service worker's `CACHE_NAME` must be bumped (e.g. `v1` → `v2`) on every deploy that changes the app shell, or browsers (Brave in particular) will keep serving stale cached files even after redeploying — this bit us once already.
+
 ## 9. Open questions / next decisions
 
 - [ ] Test on the actual target phone: does audio survive screen lock in stock Chrome? In Firefox/Brave/Kiwi? With "desktop site" forced?
