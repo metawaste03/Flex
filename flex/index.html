@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-skin="white">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -22,38 +22,41 @@
     --wheel-bg:#eceef0;
     --wheel-shadow:#a9acb1;
     --center-bg:#fafbfc;
+    --wheel-label-color:#6f7378;
     --danger:#c96a5a;
+    --page-bg:#101114;
+  }
+  :root[data-skin="black"]{
+    --body-silver-1:#4a4b50;
+    --body-silver-2:#1c1d20;
+    --body-silver-3:#2c2d31;
+    --wheel-bg:#2c2d31;
+    --wheel-shadow:#131315;
+    --center-bg:#38393e;
+    --wheel-label-color:#c9cacf;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
   html,body{height:100%; margin:0;}
   body{
-    display:flex; align-items:center; justify-content:center;
-    min-height:100vh;
-    background: radial-gradient(circle at 50% 20%, #2a2c31, #101114 70%);
+    background: var(--page-bg);
     font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    padding: 24px 12px;
     overflow:hidden;
+    overscroll-behavior:none;
   }
   .device{
-    width: min(320px, 88vw);
-    aspect-ratio: 320 / 610;
-    border-radius: 34px;
-    background:
-      linear-gradient(135deg, var(--body-silver-3), var(--body-silver-2) 40%, var(--body-silver-1) 60%, var(--body-silver-3));
-    box-shadow:
-      0 0 0 1px rgba(0,0,0,.15),
-      0 18px 40px rgba(0,0,0,.55),
-      inset 0 1px 1px rgba(255,255,255,.9),
-      inset 0 -2px 6px rgba(0,0,0,.15);
-    padding: 18px 16px 22px;
+    width:100dvw; height:100dvh;
+    background: linear-gradient(135deg, var(--body-silver-3), var(--body-silver-2) 40%, var(--body-silver-1) 60%, var(--body-silver-3));
+    padding: max(16px, env(safe-area-inset-top)) 18px max(20px, env(safe-area-inset-bottom));
     display:flex;
     flex-direction:column;
     align-items:center;
-    gap: 16px;
   }
   .screen-frame{
     width:100%;
-    aspect-ratio: 4/3;
+    /* At least 4:3, and grows into whatever height the wheel doesn't need so
+       Now Playing never gets clipped on tall phones. */
+    flex:1 1 auto;
+    min-height: calc((100dvw - 36px) * .75);
     background: var(--screen-bezel);
     border-radius: 10px;
     padding: 8px;
@@ -64,7 +67,7 @@
     background: linear-gradient(180deg, var(--screen-bg), #090b0e);
     border-radius: 4px;
     color: var(--screen-fg);
-    font-size: 13px;
+    font-size: 14px;
     display:flex;
     flex-direction:column;
     overflow:hidden;
@@ -72,18 +75,18 @@
   }
   .statusbar{
     display:flex; justify-content:space-between; align-items:center;
-    padding: 5px 8px 4px;
-    font-size: 10px;
+    padding: 6px 9px 5px;
+    font-size: 11px;
     color: var(--screen-dim);
     border-bottom: 1px solid #1c2128;
     flex-shrink:0;
   }
   .titlebar{
     text-align:center;
-    font-size: 11px;
+    font-size: 12px;
     font-weight:600;
     letter-spacing:.4px;
-    padding: 3px 0 5px;
+    padding: 4px 0 6px;
     color:#cfe0d2;
     border-bottom: 1px solid #1c2128;
     flex-shrink:0;
@@ -94,89 +97,125 @@
     display:flex; flex-direction:column;
     opacity:0; pointer-events:none;
     transform: translateX(12px);
-    transition: opacity .18s ease, transform .18s ease;
+    transition: opacity .16s ease, transform .16s ease;
   }
   .pane.active{ opacity:1; pointer-events:auto; transform:translateX(0); }
 
-  /* Menu list */
-  .menu-list{ flex:1; overflow-y:auto; padding: 2px 0; }
-  .menu-item{
-    display:flex; align-items:center; justify-content:space-between;
-    padding: 7px 10px;
-    font-size:12.5px;
+  .list-toolbar{
+    display:flex; justify-content:flex-end; padding: 5px 8px 0; flex-shrink:0;
   }
-  .menu-item.selected{ background: var(--accent); color:#0c1a10; font-weight:600; }
-  .menu-item .chev{ opacity:.6; font-size:11px; }
+  .toolbar-btn{
+    font-size:10.5px; padding:4px 8px; border-radius:4px;
+    background:#1c222a; color:var(--screen-fg); border:1px solid #2e3742;
+  }
+  .toolbar-btn.on{ background:var(--accent); color:#0c1a10; border-color:var(--accent); }
 
-  /* Paste screen */
-  .paste-wrap{ flex:1; display:flex; flex-direction:column; padding:10px; gap:8px; }
-  .paste-wrap input{
-    background:#161a20; border:1px solid #2a313b; color:var(--screen-fg);
-    border-radius:4px; padding:8px; font-size:11.5px; outline:none;
+  .list{ flex:1; overflow-y:auto; padding: 2px 0; -webkit-overflow-scrolling:touch; }
+  .list-row{
+    display:flex; align-items:center; gap:8px;
+    padding: 9px 10px;
+    font-size:13px;
+    border-bottom: 1px solid rgba(255,255,255,.03);
   }
-  .paste-wrap input:focus{ border-color: var(--accent); }
-  .paste-btn-row{ display:flex; gap:6px; }
+  .list-row.selected{ background: var(--accent); color:#0c1a10; font-weight:600; }
+  .list-row .row-main{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .list-row .row-sub{ font-size:10.5px; opacity:.7; display:block; }
+  .list-row .chev{ opacity:.6; font-size:11px; flex-shrink:0; }
+  .list-row .drag-handle{
+    flex-shrink:0; width:22px; text-align:center; font-size:15px; opacity:.6;
+    touch-action:none; cursor:grab; padding:4px;
+  }
+  .list-row.dragging{ opacity:.5; }
+  .list-row .del-btn{
+    flex-shrink:0; font-size:10.5px; padding:4px 7px; border-radius:4px;
+    background:#2a1c1a; color:var(--danger); border:1px solid #4a2c28;
+  }
+  .list-row .del-btn.confirm{ background:var(--danger); color:#fff; border-color:var(--danger); }
+  .list-row.danger .row-main{ color:var(--danger); }
+  .list-row.danger.selected{ background:var(--danger); }
+  .list-row.danger.selected .row-main{ color:#fff; }
+  .list-empty{ padding: 16px 12px; color:var(--screen-dim); font-size:11.5px; text-align:center; }
+
+  /* Paste / new playlist forms */
+  .form-wrap{ flex:1; display:flex; flex-direction:column; padding:10px; gap:8px; }
+  .form-wrap input{
+    background:#161a20; border:1px solid #2a313b; color:var(--screen-fg);
+    border-radius:4px; padding:9px; font-size:12.5px; outline:none;
+  }
+  .form-wrap input:focus{ border-color: var(--accent); }
+  .form-btn-row{ display:flex; gap:6px; }
   .mini-btn{
     flex:1; background:#1c222a; border:1px solid #2e3742; color:var(--screen-fg);
-    border-radius:4px; padding:7px 4px; font-size:11px; text-align:center;
+    border-radius:4px; padding:8px 4px; font-size:12px; text-align:center;
   }
   .mini-btn.primary{ background: var(--accent); color:#0c1a10; border-color:var(--accent); font-weight:700; }
-  .hint{ font-size:10px; color:var(--screen-dim); line-height:1.4; }
-  .status-msg{ font-size:10.5px; color: var(--accent); min-height:14px; }
+  .hint{ font-size:10.5px; color:var(--screen-dim); line-height:1.4; }
+  .status-msg{ font-size:11px; color: var(--accent); min-height:14px; }
   .status-msg.error{ color: var(--danger); }
 
   /* Now playing */
-  .np{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px; gap:8px; }
+  .np{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px; gap:9px; }
   .art{
-    width: 92px; height:92px; border-radius:4px; overflow:hidden;
+    width: 100px; height:100px; border-radius:4px; overflow:hidden;
     background:#1a1f26 center/cover no-repeat;
     box-shadow: 0 2px 8px rgba(0,0,0,.6), 0 0 0 1px #000;
   }
-  .np-title{ font-size:12px; font-weight:600; text-align:center; padding:0 6px; max-width:100%;
+  .np-title{ font-size:13px; font-weight:600; text-align:center; padding:0 6px; max-width:100%;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .np-sub{ font-size:10px; color:var(--screen-dim); }
+  .np-sub{ font-size:10.5px; color:var(--screen-dim); }
+  .np-queue{ font-size:9.5px; color:var(--screen-dim); }
   .progress-row{ width:100%; padding: 0 10px; display:flex; flex-direction:column; gap:3px; }
   .progress-track{ height:3px; background:#242a32; border-radius:2px; overflow:hidden; }
   .progress-fill{ height:100%; width:0%; background:var(--accent); }
-  .time-row{ display:flex; justify-content:space-between; font-size:9px; color:var(--screen-dim); }
-  .np-state{ font-size:10px; color:var(--screen-dim); }
+  .time-row{ display:flex; justify-content:space-between; font-size:9.5px; color:var(--screen-dim); }
+  .np-state{ font-size:10.5px; color:var(--screen-dim); display:flex; align-items:center; gap:5px; }
+  .np-state.error{ color:var(--danger); }
+  .vol-overlay{
+    position:absolute; left:10px; right:10px; bottom:10px;
+    display:flex; align-items:center; gap:7px;
+    padding:6px 8px; border-radius:5px;
+    background:rgba(8,10,13,.92); border:1px solid #2a313b;
+    font-size:11px; color:var(--screen-fg);
+    opacity:0; transition:opacity .2s ease; pointer-events:none;
+  }
+  .vol-overlay.show{ opacity:1; }
+  .vol-track{ flex:1; height:4px; background:#242a32; border-radius:2px; overflow:hidden; }
+  .vol-fill{ height:100%; width:0%; background:var(--accent); }
+  .vol-num{ width:24px; text-align:right; color:var(--screen-dim); }
 
-  /* empty state */
-  .empty{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:var(--screen-dim); font-size:11px; text-align:center; padding: 0 16px;}
+  .empty{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:var(--screen-dim); font-size:11.5px; text-align:center; padding: 0 16px;}
 
   /* click wheel */
+  .wheel-wrap{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:100%; padding-top:22px; }
   .wheel-zone{
-    width: 78%;
+    width: min(80vw, 340px, 44dvh);
     aspect-ratio: 1/1;
     border-radius:50%;
     position:relative;
     background: radial-gradient(circle at 35% 30%, var(--wheel-bg), var(--wheel-shadow) 85%);
-    box-shadow: inset 0 2px 4px rgba(255,255,255,.7), inset 0 -3px 6px rgba(0,0,0,.15), 0 2px 3px rgba(0,0,0,.25);
+    box-shadow: inset 0 2px 4px rgba(255,255,255,.35), inset 0 -3px 6px rgba(0,0,0,.25), 0 2px 3px rgba(0,0,0,.3);
     touch-action:none;
   }
   .wheel-label{
-    position:absolute; font-size:10.5px; font-weight:700; letter-spacing:.5px;
-    color:#6f7378; user-select:none;
+    position:absolute; font-size:11.5px; font-weight:700; letter-spacing:.5px;
+    color: var(--wheel-label-color); user-select:none;
   }
   .wl-menu{ top:9%; left:50%; transform:translateX(-50%); }
-  .wl-prev{ left:8%; top:50%; transform:translateY(-50%); font-size:15px; }
-  .wl-next{ right:8%; top:50%; transform:translateY(-50%); font-size:15px; }
-  .wl-play{ bottom:9%; left:50%; transform:translateX(-50%); font-size:14px; }
+  .wl-prev{ left:8%; top:50%; transform:translateY(-50%); font-size:16px; }
+  .wl-next{ right:8%; top:50%; transform:translateY(-50%); font-size:16px; }
+  .wl-play{ bottom:9%; left:50%; transform:translateX(-50%); font-size:15px; }
   .wheel-center{
     position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
     width:42%; height:42%; border-radius:50%;
-    background: radial-gradient(circle at 40% 35%, var(--center-bg), #dcdde0 88%);
-    box-shadow: 0 1px 2px rgba(0,0,0,.3), inset 0 1px 1px rgba(255,255,255,.9);
+    background: radial-gradient(circle at 40% 35%, var(--center-bg), var(--wheel-shadow) 88%);
+    box-shadow: 0 1px 2px rgba(0,0,0,.3), inset 0 1px 1px rgba(255,255,255,.5);
   }
-  .wheel-center:active{ filter:brightness(.94); }
+  .wheel-center.pressed{ filter:brightness(.9); }
   .hit{ position:absolute; }
   .hit-menu{ top:0; left:20%; width:60%; height:26%; }
   .hit-prev{ left:0; top:20%; width:26%; height:60%; }
   .hit-next{ right:0; top:20%; width:26%; height:60%; }
   .hit-play{ bottom:0; left:20%; width:60%; height:26%; }
-
-  .home-hint{ margin-top: 14px; color:#8a8f96; font-size:11px; text-align:center; max-width:280px; }
-  a.reset-link{ color:#8fce9b; }
 </style>
 </head>
 <body>
@@ -185,23 +224,40 @@
   <div class="screen-frame">
     <div class="screen">
       <div class="statusbar">
-        <span id="sb-left">FLEX</span>
-        <span id="sb-right">●</span>
+        <span id="sbLeft">FLEX</span>
+        <span id="sbRight">○</span>
       </div>
       <div class="titlebar" id="titlebar">Menu</div>
 
       <div class="view">
-        <!-- MENU PANE -->
         <div class="pane active" data-pane="menu">
-          <div class="menu-list" id="menuList"></div>
+          <div class="list" id="menuList"></div>
         </div>
 
-        <!-- PASTE LINK PANE -->
+        <div class="pane" data-pane="playlists">
+          <div class="list" id="playlistsList"></div>
+        </div>
+
+        <div class="pane" data-pane="playlistDetail">
+          <div class="list-toolbar"><span class="toolbar-btn" id="editToggle">Edit</span></div>
+          <div class="list" id="playlistDetailList"></div>
+        </div>
+
+        <div class="pane" data-pane="newPlaylist">
+          <div class="form-wrap">
+            <div class="hint" id="newPlaylistHint">Name your new playlist.</div>
+            <input id="newPlaylistInput" type="text" placeholder="Playlist name" autocomplete="off" autocapitalize="words">
+            <div class="form-btn-row">
+              <div class="mini-btn primary" id="createPlaylistBtn">Create</div>
+            </div>
+          </div>
+        </div>
+
         <div class="pane" data-pane="paste">
-          <div class="paste-wrap">
-            <div class="hint">Paste a YouTube video or podcast link. Uses YouTube's own player — nothing is downloaded.</div>
+          <div class="form-wrap">
+            <div class="hint" id="pasteHint">Paste a YouTube video or podcast link. Uses YouTube's own player — nothing is downloaded.</div>
             <input id="linkInput" type="url" placeholder="https://youtube.com/watch?v=..." inputmode="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
-            <div class="paste-btn-row">
+            <div class="form-btn-row">
               <div class="mini-btn" id="pasteFromClipboard">Paste</div>
               <div class="mini-btn primary" id="loadLink">Load</div>
             </div>
@@ -209,164 +265,417 @@
           </div>
         </div>
 
-        <!-- NOW PLAYING PANE -->
         <div class="pane" data-pane="nowplaying">
           <div class="np" id="npContent">
             <div class="empty">
               <div>Nothing loaded yet.</div>
-              <div>Menu → Paste Link to add something.</div>
+              <div>Menu → Playlists or Quick Play to add something.</div>
             </div>
           </div>
+          <div class="vol-overlay" id="volOverlay">
+            <span>🔊</span>
+            <div class="vol-track"><div class="vol-fill" id="volFill"></div></div>
+            <span class="vol-num" id="volNum">0</span>
+          </div>
+        </div>
+
+        <div class="pane" data-pane="settings">
+          <div class="list" id="settingsList"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- hidden YouTube player mount -->
   <div id="ytMount" style="width:0;height:0;overflow:hidden;position:absolute;"></div>
 
-  <div class="wheel-zone" id="wheel">
-    <div class="wheel-label wl-menu">MENU</div>
-    <div class="wheel-label wl-prev">◀◀</div>
-    <div class="wheel-label wl-next">▶▶</div>
-    <div class="wheel-label wl-play">▶❚❚</div>
-    <div class="hit hit-menu" data-action="menu"></div>
-    <div class="hit hit-prev" data-action="prev"></div>
-    <div class="hit hit-next" data-action="next"></div>
-    <div class="hit hit-play" data-action="play"></div>
-    <div class="wheel-center" id="centerBtn" data-action="select"></div>
+  <div class="wheel-wrap">
+    <div class="wheel-zone" id="wheel">
+      <div class="wheel-label wl-menu">MENU</div>
+      <div class="wheel-label wl-prev">◀◀</div>
+      <div class="wheel-label wl-next">▶▶</div>
+      <div class="wheel-label wl-play">▶❚❚</div>
+      <div class="hit hit-menu" data-action="menu"></div>
+      <div class="hit hit-prev" data-action="prev"></div>
+      <div class="hit hit-next" data-action="next"></div>
+      <div class="hit hit-play" data-action="play"></div>
+      <div class="wheel-center" id="centerBtn" data-action="select"></div>
+    </div>
   </div>
 </div>
 
-<div class="home-hint">
-  Prototype build. If audio stops when you lock the screen or switch apps, that's the known platform limitation described in chat — try "Request desktop site" in Chrome as a workaround, and note it in feedback.
-</div>
-
 <script>
-/* ---------- App state ---------- */
+/* ================= State ================= */
+const LS_KEY = 'flex_state_v1';
+
+function loadPersisted(){
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e){}
+  return { playlists: [], skin: 'white', repeatMode: 'off' };
+}
+const persisted = loadPersisted();
+
 const state = {
-  pane: 'menu',
-  menuIndex: 0,
-  menuItems: [
-    { label: 'Paste Link', pane: 'paste' },
-    { label: 'Now Playing', pane: 'nowplaying' },
-  ],
+  playlists: persisted.playlists || [],
+  skin: persisted.skin || 'white',
+  repeatMode: persisted.repeatMode || 'off',   // off | all | one
+  stack: [{ pane: 'menu', index: 0 }],
   player: null,
   ytReady: false,
-  pendingVideoId: null,
+  queue: null,        // { tracks:[...], currentIndex, playlistId }
   currentMeta: null,
   isPlaying: false,
   progressTimer: null,
+  audioCtx: null,
+  dragging: false,
+  lastAngle: null,
+  dragAccum: 0,
+  activePress: null,
+  seekInterval: null,
+  playerState: -1,
+  resumeAt: 0,        // seconds to show/cue when restoring a saved session
+  lastSessionSave: 0,
+  volTimer: null,
+  duration: 0,
 };
 
+function saveState(){
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      playlists: state.playlists, skin: state.skin, repeatMode: state.repeatMode
+    }));
+  } catch(e){}
+}
+
+/* The playback session (queue + position) is saved separately so that when
+   Android discards the backgrounded tab and the app reloads, it comes back to
+   the same track at the same spot instead of a blank screen. */
+const SESSION_KEY = 'flex_session_v1';
+function loadSession(){
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY));
+    if (s && s.queue && Array.isArray(s.queue.tracks) && s.queue.tracks[s.queue.currentIndex]) return s;
+  } catch(e){}
+  return null;
+}
+function saveSession(){
+  if (!state.queue || !state.currentMeta) return;
+  // resumeAt is non-zero until the restored track actually starts playing;
+  // before that the player reports 0 and would wipe the saved spot.
+  let position = state.resumeAt || 0;
+  try {
+    if (!position && state.player && state.ytReady && state.player.getCurrentTime) {
+      position = state.player.getCurrentTime() || 0;
+    }
+  } catch(e){}
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ queue: state.queue, position, duration: state.duration || 0 }));
+  } catch(e){}
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveSession(); });
+window.addEventListener('pagehide', saveSession);
+function uid(){ return Math.random().toString(36).slice(2, 10); }
+
+const MENU_ITEMS = [
+  { label: 'Playlists', go: 'playlists' },
+  { label: 'Quick Play', go: 'paste' },
+  { label: 'Now Playing', go: 'nowplaying' },
+  { label: 'Settings', go: 'settings' },
+];
+
+function current(){ return state.stack[state.stack.length - 1]; }
+function pushPane(pane, extra = {}){ state.stack.push({ pane, index: 0, ...extra }); render(); }
+function popPane(){ if (state.stack.length > 1) { state.stack.pop(); render(); } }
+
+/* ================= Rendering / navigation ================= */
 const panes = document.querySelectorAll('.pane');
 const titlebar = document.getElementById('titlebar');
-const menuListEl = document.getElementById('menuList');
-const pasteStatus = document.getElementById('pasteStatus');
-const linkInput = document.getElementById('linkInput');
-const npContent = document.getElementById('npContent');
+const sbRight = document.getElementById('sbRight');
 
-function renderMenu(){
-  menuListEl.innerHTML = '';
-  state.menuItems.forEach((item, i) => {
+function paneTitle(entry){
+  if (entry.pane === 'playlistDetail') {
+    const pl = state.playlists.find(p => p.id === entry.playlistId);
+    return pl ? pl.name : 'Playlist';
+  }
+  if (entry.pane === 'newPlaylist' && entry.playlistId) return 'Rename Playlist';
+  const titles = {
+    menu: 'Menu', playlists: 'Playlists', newPlaylist: 'New Playlist',
+    paste: 'Paste Link', nowplaying: 'Now Playing', settings: 'Settings'
+  };
+  return titles[entry.pane] || 'FLEX';
+}
+
+function render(){
+  const entry = current();
+  panes.forEach(p => p.classList.toggle('active', p.dataset.pane === entry.pane));
+  titlebar.textContent = paneTitle(entry);
+
+  if (entry.pane === 'menu') renderMenu(entry);
+  if (entry.pane === 'playlists') renderPlaylists(entry);
+  if (entry.pane === 'playlistDetail') renderPlaylistDetail(entry);
+  if (entry.pane === 'paste') {
+    document.getElementById('pasteHint').textContent = entry.playlistId
+      ? 'Paste a link to add it to this playlist.'
+      : "Paste a YouTube video or podcast link. Uses YouTube's own player — nothing is downloaded.";
+    setTimeout(() => document.getElementById('linkInput').focus({ preventScroll: true }), 50);
+  }
+  if (entry.pane === 'newPlaylist') {
+    const pl = entry.playlistId && state.playlists.find(p => p.id === entry.playlistId);
+    document.getElementById('newPlaylistInput').value = pl ? pl.name : '';
+    document.getElementById('newPlaylistHint').textContent = pl ? 'Give this playlist a new name.' : 'Name your new playlist.';
+    document.getElementById('createPlaylistBtn').textContent = pl ? 'Save' : 'Create';
+    setTimeout(() => document.getElementById('newPlaylistInput').focus({ preventScroll: true }), 50);
+  }
+  if (entry.pane === 'settings') renderSettings(entry);
+  if (entry.pane === 'nowplaying' && state.currentMeta) renderNowPlaying();
+  if (entry.pane !== 'nowplaying') hideVolume();
+}
+
+function listLength(entry){
+  if (entry.pane === 'menu') return MENU_ITEMS.length;
+  if (entry.pane === 'playlists') return state.playlists.length + 1; // + New Playlist row
+  if (entry.pane === 'playlistDetail') {
+    const pl = state.playlists.find(p => p.id === entry.playlistId);
+    // + Add Song row normally; + Rename / Delete Playlist rows in edit mode
+    return (pl ? pl.tracks.length : 0) + (entry.editing ? 2 : 1);
+  }
+  if (entry.pane === 'settings') return 2; // Skin, Repeat
+  return 0;
+}
+
+function moveSelection(direction){
+  const entry = current();
+  if (entry.pane === 'nowplaying') { adjustVolume(direction); return; }
+  const len = listLength(entry);
+  if (!len) return;
+  entry.index = Math.max(0, Math.min(len - 1, entry.index + direction));
+  if (entry.confirmDelete) entry.confirmDelete = null;
+  tickSound(); vibrate(6);
+  if (entry.pane === 'menu') renderMenu(entry);
+  if (entry.pane === 'playlists') renderPlaylists(entry);
+  if (entry.pane === 'playlistDetail') renderPlaylistDetail(entry);
+  if (entry.pane === 'settings') renderSettings(entry);
+}
+
+/* ---- Menu pane ---- */
+function renderMenu(entry){
+  const el = document.getElementById('menuList');
+  el.innerHTML = '';
+  MENU_ITEMS.forEach((item, i) => {
     const row = document.createElement('div');
-    row.className = 'menu-item' + (i === state.menuIndex ? ' selected' : '');
-    row.innerHTML = `<span>${item.label}</span><span class="chev">›</span>`;
-    row.addEventListener('click', () => { state.menuIndex = i; goToPane(item.pane); });
-    menuListEl.appendChild(row);
+    row.className = 'list-row' + (i === entry.index ? ' selected' : '');
+    row.innerHTML = `<span class="row-main">${item.label}</span><span class="chev">›</span>`;
+    row.addEventListener('click', () => { entry.index = i; pushPane(item.go); });
+    el.appendChild(row);
   });
 }
 
-function setTitle(pane){
-  const titles = { menu: 'Menu', paste: 'Paste Link', nowplaying: 'Now Playing' };
-  titlebar.textContent = titles[pane] || 'FLEX';
+/* ---- Playlists pane ---- */
+function renderPlaylists(entry){
+  const el = document.getElementById('playlistsList');
+  el.innerHTML = '';
+  if (state.playlists.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'list-empty';
+    empty.textContent = 'No playlists yet.';
+    el.appendChild(empty);
+  }
+  state.playlists.forEach((pl, i) => {
+    const row = document.createElement('div');
+    row.className = 'list-row' + (i === entry.index ? ' selected' : '');
+    row.innerHTML = `<span class="row-main">${escapeHtml(pl.name)}<span class="row-sub">${pl.tracks.length} track${pl.tracks.length===1?'':'s'}</span></span><span class="chev">›</span>`;
+    row.addEventListener('click', () => { entry.index = i; pushPane('playlistDetail', { playlistId: pl.id }); });
+    el.appendChild(row);
+  });
+  const newRow = document.createElement('div');
+  const newIdx = state.playlists.length;
+  newRow.className = 'list-row' + (newIdx === entry.index ? ' selected' : '');
+  newRow.innerHTML = `<span class="row-main">+ New Playlist</span>`;
+  newRow.addEventListener('click', () => { entry.index = newIdx; pushPane('newPlaylist'); });
+  el.appendChild(newRow);
 }
 
-function goToPane(pane){
-  state.pane = pane;
-  panes.forEach(p => p.classList.toggle('active', p.dataset.pane === pane));
-  setTitle(pane);
-  if (pane === 'paste') { setTimeout(() => linkInput.focus({preventScroll:true}), 50); }
+/* ---- Playlist detail pane ---- */
+function renderPlaylistDetail(entry){
+  const pl = state.playlists.find(p => p.id === entry.playlistId);
+  const el = document.getElementById('playlistDetailList');
+  const toggle = document.getElementById('editToggle');
+  toggle.classList.toggle('on', !!entry.editing);
+  toggle.textContent = entry.editing ? 'Done' : 'Edit';
+  el.innerHTML = '';
+  if (!pl) { el.innerHTML = '<div class="list-empty">Playlist not found.</div>'; return; }
+
+  if (pl.tracks.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'list-empty';
+    empty.textContent = entry.editing ? 'No songs in this playlist.' : 'No songs yet — add one below.';
+    el.appendChild(empty);
+  }
+
+  pl.tracks.forEach((tr, i) => {
+    const row = document.createElement('div');
+    row.className = 'list-row' + (i === entry.index ? ' selected' : '');
+    row.dataset.itemId = tr.id;
+    const confirming = entry.editing && entry.confirmDelete === tr.id;
+    row.innerHTML = `
+      ${entry.editing ? '<span class="drag-handle">☰</span>' : ''}
+      <span class="row-main">${escapeHtml(tr.title)}<span class="row-sub">${escapeHtml(tr.author || '')}</span></span>
+      ${entry.editing
+        ? `<span class="del-btn${confirming ? ' confirm' : ''}">${confirming ? 'Delete?' : '✕'}</span>`
+        : '<span class="chev">▶</span>'}
+    `;
+    if (entry.editing) {
+      row.querySelector('.del-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        requestDeleteTrack(entry, pl, tr.id);
+      });
+    } else {
+      row.addEventListener('click', () => {
+        entry.index = i;
+        setQueueFromPlaylist(pl.id, i);
+        pushPane('nowplaying');
+      });
+    }
+    el.appendChild(row);
+  });
+
+  const extraRows = entry.editing
+    ? [
+        { label: 'Rename Playlist', run: () => pushPane('newPlaylist', { playlistId: pl.id }) },
+        { label: entry.confirmDelete === 'playlist' ? 'Tap again to delete playlist' : 'Delete Playlist',
+          danger: true, run: () => requestDeletePlaylist(entry, pl) },
+      ]
+    : [ { label: '+ Add Song', run: () => pushPane('paste', { playlistId: pl.id }) } ];
+  extraRows.forEach((r, k) => {
+    const idx = pl.tracks.length + k;
+    const row = document.createElement('div');
+    row.className = 'list-row' + (r.danger ? ' danger' : '') + (idx === entry.index ? ' selected' : '');
+    row.innerHTML = `<span class="row-main">${r.label}</span>`;
+    row.addEventListener('click', () => { entry.index = idx; r.run(); });
+    el.appendChild(row);
+  });
+
+  if (entry.editing) enableDragReorder(el, pl.tracks, 'id', () => syncQueueWithPlaylist(pl));
 }
 
-/* ---------- Wheel interactions ---------- */
-document.getElementById('wheel').addEventListener('click', (e) => {
-  const hit = e.target.closest('[data-action]');
-  if (!hit) return;
-  const action = hit.dataset.action;
-  handleAction(action);
+// Destructive actions take two taps: the first arms the button, the second
+// (on the same item) confirms. Anything else in between disarms it.
+function requestDeleteTrack(entry, pl, trackId){
+  if (entry.confirmDelete !== trackId) {
+    entry.confirmDelete = trackId;
+    thockSound(); vibrate(15);
+    renderPlaylistDetail(entry);
+    return;
+  }
+  entry.confirmDelete = null;
+  pl.tracks = pl.tracks.filter(t => t.id !== trackId);
+  saveState();
+  syncQueueWithPlaylist(pl);
+  entry.index = Math.min(entry.index, listLength(entry) - 1);
+  thockSound(); vibrate([10, 40, 10]);
+  renderPlaylistDetail(entry);
+}
+function requestDeletePlaylist(entry, pl){
+  if (entry.confirmDelete !== 'playlist') {
+    entry.confirmDelete = 'playlist';
+    thockSound(); vibrate(15);
+    renderPlaylistDetail(entry);
+    return;
+  }
+  state.playlists = state.playlists.filter(p => p.id !== pl.id);
+  saveState();
+  // A playing queue keeps its own copy of the tracks, so playback carries on;
+  // it just stops being tied to the deleted playlist.
+  if (state.queue && state.queue.playlistId === pl.id) { state.queue.playlistId = null; saveSession(); }
+  vibrate([10, 40, 10]);
+  popPane();
+  const parent = current();
+  if (parent.pane === 'playlists') { parent.index = Math.min(parent.index, listLength(parent) - 1); renderPlaylists(parent); }
+}
+
+// Keep the active queue in step when its playlist is edited (tracks added,
+// removed or reordered) so next/previous follow the playlist as it is now.
+function syncQueueWithPlaylist(pl){
+  const q = state.queue;
+  if (!q || q.playlistId !== pl.id) return;
+  const playingId = q.tracks[q.currentIndex] && q.tracks[q.currentIndex].id;
+  const newIndex = pl.tracks.findIndex(t => t.id === playingId);
+  if (newIndex >= 0) {
+    q.currentIndex = newIndex;
+  } else {
+    // The playing track was removed: it keeps playing, and "next" moves on to
+    // the track that followed it.
+    const followerIdx = q.tracks.slice(q.currentIndex + 1).map(t => pl.tracks.findIndex(p => p.id === t.id)).find(i => i >= 0);
+    q.currentIndex = (followerIdx === undefined ? pl.tracks.length : followerIdx) - 1;
+  }
+  q.tracks = pl.tracks.slice();
+  saveSession();
+  if (current().pane === 'nowplaying') renderNowPlaying();
+}
+
+document.getElementById('editToggle').addEventListener('click', () => {
+  const entry = current();
+  if (entry.pane !== 'playlistDetail') return;
+  entry.editing = !entry.editing;
+  entry.confirmDelete = null;
+  entry.index = Math.min(entry.index, listLength(entry) - 1);
+  thockSound(); vibrate(15);
+  renderPlaylistDetail(entry);
 });
 
-function handleAction(action){
-  if (action === 'menu') {
-    goToPane('menu');
-    return;
-  }
-  if (state.pane === 'menu') {
-    if (action === 'prev') state.menuIndex = Math.max(0, state.menuIndex - 1);
-    if (action === 'next') state.menuIndex = Math.min(state.menuItems.length - 1, state.menuIndex + 1);
-    if (action === 'select') goToPane(state.menuItems[state.menuIndex].pane);
-    renderMenu();
-    return;
-  }
-  if (state.pane === 'paste') {
-    if (action === 'select') loadLinkFromInput();
-    return;
-  }
-  if (state.pane === 'nowplaying') {
-    if (action === 'play' || action === 'select') togglePlay();
-    if (action === 'prev') seekBy(-10);
-    if (action === 'next') seekBy(10);
-    return;
-  }
+/* ---- New / rename playlist pane ---- */
+document.getElementById('createPlaylistBtn').addEventListener('click', createPlaylistFromInput);
+document.getElementById('newPlaylistInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') createPlaylistFromInput(); });
+function createPlaylistFromInput(){
+  const input = document.getElementById('newPlaylistInput');
+  const name = input.value.trim();
+  if (!name) return;
+  const renaming = current().playlistId && state.playlists.find(p => p.id === current().playlistId);
+  if (renaming) renaming.name = name;
+  else state.playlists.push({ id: uid(), name, tracks: [] });
+  saveState();
+  input.value = '';
+  popPane();
 }
 
-/* Click-wheel style scroll: dragging around the ring adjusts volume */
-(function enableScrollWheel(){
-  const wheel = document.getElementById('wheel');
-  let dragging = false;
-  let lastAngle = null;
+/* ---- Settings pane ---- */
+function renderSettings(entry){
+  const el = document.getElementById('settingsList');
+  el.innerHTML = '';
+  const rows = [
+    { label: 'Skin', value: state.skin === 'black' ? 'Black' : 'White' },
+    { label: 'Repeat', value: state.repeatMode === 'off' ? 'Off' : state.repeatMode === 'all' ? 'All' : 'One' },
+  ];
+  rows.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'list-row' + (i === entry.index ? ' selected' : '');
+    row.innerHTML = `<span class="row-main">${r.label}</span><span class="row-sub" style="text-align:right;flex-shrink:0;">${r.value}</span>`;
+    row.addEventListener('click', () => { entry.index = i; activateSettingsRow(i); });
+    el.appendChild(row);
+  });
+}
+function activateSettingsRow(i){
+  if (i === 0) { setSkin(state.skin === 'black' ? 'white' : 'black'); }
+  if (i === 1) { cycleRepeatMode(); }
+  renderSettings(current());
+}
+function setSkin(skin){
+  state.skin = skin;
+  document.documentElement.setAttribute('data-skin', skin);
+  saveState();
+}
+function cycleRepeatMode(){
+  state.repeatMode = state.repeatMode === 'off' ? 'all' : state.repeatMode === 'all' ? 'one' : 'off';
+  saveState();
+  if (current().pane === 'nowplaying') renderNowPlaying();
+}
+document.documentElement.setAttribute('data-skin', state.skin);
 
-  function angleFromEvent(e){
-    const rect = wheel.getBoundingClientRect();
-    const cx = rect.left + rect.width/2;
-    const cy = rect.top + rect.height/2;
-    const point = e.touches ? e.touches[0] : e;
-    return Math.atan2(point.clientY - cy, point.clientX - cx);
-  }
-
-  function onStart(e){
-    if (e.target.closest('.wheel-center') || e.target.closest('.hit')) return;
-    dragging = true;
-    lastAngle = angleFromEvent(e);
-  }
-  function onMove(e){
-    if (!dragging || !state.player || !state.ytReady) return;
-    const angle = angleFromEvent(e);
-    let delta = angle - lastAngle;
-    if (delta > Math.PI) delta -= 2*Math.PI;
-    if (delta < -Math.PI) delta += 2*Math.PI;
-    lastAngle = angle;
-    const volumeDelta = (delta / (2*Math.PI)) * 100 * 3;
-    try {
-      const current = state.player.getVolume ? state.player.getVolume() : 50;
-      const next = Math.max(0, Math.min(100, current + volumeDelta));
-      state.player.setVolume(next);
-    } catch(err){}
-    e.preventDefault();
-  }
-  function onEnd(){ dragging = false; lastAngle = null; }
-
-  wheel.addEventListener('mousedown', onStart);
-  window.addEventListener('mousemove', onMove);
-  window.addEventListener('mouseup', onEnd);
-  wheel.addEventListener('touchstart', onStart, {passive:true});
-  window.addEventListener('touchmove', onMove, {passive:false});
-  window.addEventListener('touchend', onEnd);
-})();
-
-/* ---------- Paste / link handling ---------- */
+/* ---- Paste pane ---- */
 document.getElementById('pasteFromClipboard').addEventListener('click', async () => {
+  const linkInput = document.getElementById('linkInput');
+  const pasteStatus = document.getElementById('pasteStatus');
   try {
     const text = await navigator.clipboard.readText();
     linkInput.value = text.trim();
@@ -377,29 +686,35 @@ document.getElementById('pasteFromClipboard').addEventListener('click', async ()
     pasteStatus.classList.add('error');
   }
 });
-
 document.getElementById('loadLink').addEventListener('click', loadLinkFromInput);
-linkInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadLinkFromInput(); });
+document.getElementById('linkInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadLinkFromInput(); });
 
+const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 function extractVideoId(url){
+  let id = null;
   try {
     const u = new URL(url.trim());
-    if (u.hostname.includes('youtu.be')) {
-      return u.pathname.replace('/', '').split('?')[0];
-    }
-    if (u.hostname.includes('youtube.com')) {
-      if (u.pathname === '/watch') return u.searchParams.get('v');
-      if (u.pathname.startsWith('/shorts/')) return u.pathname.split('/')[2];
-      if (u.pathname.startsWith('/embed/')) return u.pathname.split('/')[2];
-      if (u.pathname.startsWith('/live/')) return u.pathname.split('/')[2];
+    const host = u.hostname.replace(/^(www|m|music)\./, '');
+    const seg = u.pathname.split('/');
+    if (host === 'youtu.be') id = seg[1];
+    else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+      if (u.pathname === '/watch') id = u.searchParams.get('v');
+      else if (['shorts', 'embed', 'live', 'v'].includes(seg[1])) id = seg[2];
     }
   } catch (err) { return null; }
-  return null;
+  return id && VIDEO_ID_RE.test(id) ? id : null;
+}
+
+function fetchTrackMeta(id){
+  return fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`)
+    .then(r => r.ok ? r.json() : {})
+    .catch(() => ({}));
 }
 
 function loadLinkFromInput(){
-  const raw = linkInput.value;
-  const id = extractVideoId(raw);
+  const linkInput = document.getElementById('linkInput');
+  const pasteStatus = document.getElementById('pasteStatus');
+  const id = extractVideoId(linkInput.value);
   if (!id) {
     pasteStatus.textContent = 'Could not read a video from that link.';
     pasteStatus.classList.add('error');
@@ -407,86 +722,122 @@ function loadLinkFromInput(){
   }
   pasteStatus.textContent = 'Loading…';
   pasteStatus.classList.remove('error');
-  playVideoId(id);
+  fetchTrackMeta(id).then(meta => {
+    const track = {
+      id: uid(), videoId: id,
+      title: meta.title || 'Untitled',
+      author: meta.author_name || '',
+      thumb: `https://img.youtube.com/vi/${id}/mqdefault.jpg`
+    };
+    const entry = current();
+    if (entry.playlistId) {
+      const pl = state.playlists.find(p => p.id === entry.playlistId);
+      if (pl) {
+        pl.tracks.push(track);
+        saveState();
+        syncQueueWithPlaylist(pl);
+        pasteStatus.textContent = `Added to ${pl.name}.`;
+        linkInput.value = '';
+        setTimeout(() => popPane(), 500);
+      }
+    } else {
+      pasteStatus.textContent = '';
+      state.queue = { tracks: [track], currentIndex: 0, playlistId: null };
+      linkInput.value = '';
+      state.stack.pop();
+      pushPane('nowplaying');
+      playTrackAtQueueIndex(0);
+    }
+  }).catch(() => {
+    pasteStatus.textContent = 'That link could not be loaded.';
+    pasteStatus.classList.add('error');
+  });
 }
 
-/* ---------- YouTube IFrame API ---------- */
+/* ================= YouTube playback / queue ================= */
+const YT_ERRORS = {
+  2: 'Invalid video link.',
+  5: "This video can't play in the embedded player.",
+  100: 'Video not found — it may be private or removed.',
+  101: 'The owner has disabled playback outside YouTube.',
+  150: 'The owner has disabled playback outside YouTube.',
+};
+
 window.onYouTubeIframeAPIReady = function () {
   state.player = new YT.Player('ytMount', {
     height: '1', width: '1',
     playerVars: { playsinline: 1, controls: 0, disablekb: 1, rel: 0 },
     events: {
-      onReady: () => { state.ytReady = true; },
+      onReady: () => {
+        state.ytReady = true;
+        // Restored session: cue (not play) the track at the saved position.
+        // Browsers only allow playback to start from a tap, so the user
+        // presses play to carry on where they left off.
+        if (state.pendingCue) {
+          const t = state.pendingCue;
+          state.pendingCue = null;
+          state.player.cueVideoById({ videoId: t.videoId, startSeconds: Math.floor(state.resumeAt) });
+          startProgressLoop();
+        }
+      },
       onStateChange: onPlayerStateChange,
-      onError: () => {
-        pasteStatus.textContent = 'That link could not be played.';
-        pasteStatus.classList.add('error');
-      }
+      onError: onPlayerError,
     }
   });
 };
-
-function loadYouTubeApi(){
+(function loadYouTubeApi(){
   const tag = document.createElement('script');
   tag.src = 'https://www.youtube.com/iframe_api';
   document.head.appendChild(tag);
-}
-loadYouTubeApi();
+})();
 
-function playVideoId(id){
-  state.pendingVideoId = id;
-  const tryPlay = () => {
-    if (!state.ytReady) { setTimeout(tryPlay, 200); return; }
-    state.player.loadVideoById(id);
-    fetchMeta(id);
-    goToPane('nowplaying');
-    startProgressLoop();
-  };
-  tryPlay();
+function setQueueFromPlaylist(playlistId, index){
+  const pl = state.playlists.find(p => p.id === playlistId);
+  if (!pl) return;
+  state.queue = { tracks: pl.tracks.slice(), currentIndex: index, playlistId };
+  state.errorStreak = 0;
+  playTrackAtQueueIndex(index);
 }
 
-function fetchMeta(id){
-  // oEmbed gives title without needing an API key
-  fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`)
-    .then(r => r.ok ? r.json() : null)
-    .then(data => {
-      state.currentMeta = data || { title: 'Untitled', author_name: '' };
-      renderNowPlaying();
-    })
-    .catch(() => {
-      state.currentMeta = { title: 'Untitled', author_name: '' };
-      renderNowPlaying();
-    });
+function playTrackAtQueueIndex(i){
+  const q = state.queue;
+  if (!q || !q.tracks[i]) return;
+  if (!state.ytReady) { setTimeout(() => playTrackAtQueueIndex(i), 200); return; }
+  q.currentIndex = i;
+  const track = q.tracks[i];
+  state.pendingCue = null;
+  state.resumeAt = 0;
+  state.duration = 0;
+  state.errorMsg = null;
+  clearTimeout(state.errorSkipTimer);
+  state.player.loadVideoById(track.videoId);
+  state.currentMeta = track;
+  renderNowPlaying();
+  updateMediaSession();
+  startProgressLoop();
+  saveSession();
 }
 
-function renderNowPlaying(){
-  const meta = state.currentMeta || {};
-  const thumb = state.pendingVideoId ? `https://img.youtube.com/vi/${state.pendingVideoId}/mqdefault.jpg` : '';
-  npContent.innerHTML = `
-    <div class="art" style="background-image:url('${thumb}')"></div>
-    <div class="np-title">${escapeHtml(meta.title || 'Untitled')}</div>
-    <div class="np-sub">${escapeHtml(meta.author_name || '')}</div>
-    <div class="progress-row">
-      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-      <div class="time-row"><span id="timeCurrent">0:00</span><span id="timeTotal">0:00</span></div>
-    </div>
-    <div class="np-state" id="npState">Loading…</div>
-  `;
-}
-
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function onPlayerStateChange(e){
-  state.isPlaying = (e.data === YT.PlayerState.PLAYING);
-  const npState = document.getElementById('npState');
-  if (npState) {
-    npState.textContent = state.isPlaying ? 'Playing' : (e.data === YT.PlayerState.PAUSED ? 'Paused' : e.data === YT.PlayerState.ENDED ? 'Ended' : 'Buffering…');
+function nextTrack(auto){
+  const q = state.queue;
+  if (!q) return;
+  let ni = q.currentIndex + 1;
+  if (ni >= q.tracks.length) {
+    if (state.repeatMode === 'all') ni = 0;
+    else if (auto) { state.player.pauseVideo(); return; }
+    else ni = q.tracks.length - 1;
   }
-  if (e.data === YT.PlayerState.PLAYING) {
-    pasteStatus.textContent = '';
-  }
+  playTrackAtQueueIndex(ni);
+}
+
+function prevTrack(){
+  const q = state.queue;
+  if (!q) return;
+  const t = (state.player && state.player.getCurrentTime) ? state.player.getCurrentTime() : 0;
+  if (t > 3) { state.player.seekTo(0, true); return; }
+  let pi = q.currentIndex - 1;
+  if (pi < 0) pi = state.repeatMode === 'all' ? q.tracks.length - 1 : 0;
+  playTrackAtQueueIndex(pi);
 }
 
 function togglePlay(){
@@ -494,59 +845,348 @@ function togglePlay(){
   if (state.isPlaying) state.player.pauseVideo(); else state.player.playVideo();
 }
 
+function onPlayerStateChange(e){
+  state.playerState = e.data;
+  state.isPlaying = (e.data === YT.PlayerState.PLAYING);
+  if (state.isPlaying) { state.resumeAt = 0; state.errorMsg = null; state.errorStreak = 0; }
+  sbRight.textContent = state.isPlaying ? '●' : '○';
+  updateNpState();
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
+  if (e.data === YT.PlayerState.PAUSED) saveSession();
+  if (e.data === YT.PlayerState.ENDED) {
+    if (state.repeatMode === 'one') { state.player.seekTo(0, true); state.player.playVideo(); }
+    else nextTrack(true);
+  }
+}
+
+// Shown on the Now Playing screen (where the user actually is), and in a
+// queue the player skips ahead after a moment, like an iPod skipping a bad file.
+function onPlayerError(e){
+  state.errorMsg = YT_ERRORS[e.data] || "This video couldn't be played.";
+  updateNpState();
+  const q = state.queue;
+  state.errorStreak = (state.errorStreak || 0) + 1;
+  if (q && q.tracks.length > 1 && state.repeatMode !== 'one' && state.errorStreak < q.tracks.length) {
+    clearTimeout(state.errorSkipTimer);
+    state.errorSkipTimer = setTimeout(() => nextTrack(true), 2500);
+  }
+}
+
+function adjustVolume(direction){
+  if (!state.player || !state.ytReady || !state.player.getVolume) return;
+  // Track volume locally: getVolume() lags behind setVolume() by a tick, which
+  // makes fast wheel spins stutter.
+  if (state.volume == null) state.volume = state.player.getVolume();
+  state.volume = Math.max(0, Math.min(100, state.volume + direction * 4));
+  if (state.player.isMuted && state.player.isMuted()) state.player.unMute();
+  state.player.setVolume(state.volume);
+  tickSound(); vibrate(4);
+  showVolume(state.volume);
+}
+function showVolume(v){
+  document.getElementById('volFill').style.width = `${v}%`;
+  document.getElementById('volNum').textContent = v;
+  document.getElementById('volOverlay').classList.add('show');
+  clearTimeout(state.volTimer);
+  state.volTimer = setTimeout(hideVolume, 1200);
+}
+function hideVolume(){ document.getElementById('volOverlay').classList.remove('show'); }
+
 function seekBy(seconds){
   if (!state.player || !state.ytReady) return;
   try {
     const t = state.player.getCurrentTime() + seconds;
     state.player.seekTo(Math.max(0, t), true);
-  } catch(err){}
+  } catch (err) {}
+}
+function startContinuousSeek(direction){
+  stopContinuousSeek();
+  state.seekInterval = setInterval(() => seekBy(direction * 2), 150);
+}
+function stopContinuousSeek(){
+  if (state.seekInterval) { clearInterval(state.seekInterval); state.seekInterval = null; }
 }
 
+/* ---- Now playing render ---- */
+function npStateHtml(){
+  if (state.errorMsg) return escapeHtml(state.errorMsg);
+  const label = state.isPlaying ? 'Playing' : state.resumeAt ? 'Paused — press ▶❚❚ to resume' : 'Paused';
+  const repeatIcon = state.repeatMode === 'off' ? '' : state.repeatMode === 'all' ? ' 🔁' : ' 🔂';
+  return `${label}${repeatIcon}`;
+}
+function updateNpState(){
+  const el = document.getElementById('npState');
+  if (!el) return;
+  el.innerHTML = npStateHtml();
+  el.classList.toggle('error', !!state.errorMsg);
+}
+function renderNowPlaying(){
+  const meta = state.currentMeta || {};
+  const q = state.queue;
+  // Only show the position when the playing track is still in the queue (it
+  // may have just been deleted from its playlist).
+  const inQueue = q && q.tracks[q.currentIndex] && q.tracks[q.currentIndex].id === meta.id;
+  const npContent = document.getElementById('npContent');
+  npContent.innerHTML = `
+    <div class="art" style="background-image:url('${meta.thumb || ''}')"></div>
+    <div class="np-title">${escapeHtml(meta.title || 'Untitled')}</div>
+    <div class="np-sub">${escapeHtml(meta.author || '')}</div>
+    ${inQueue && q.tracks.length > 1 ? `<div class="np-queue">Track ${q.currentIndex + 1} of ${q.tracks.length}</div>` : ''}
+    <div class="progress-row">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="time-row"><span id="timeCurrent">${fmtTime(state.resumeAt)}</span><span id="timeTotal">0:00</span></div>
+    </div>
+    <div class="np-state" id="npState"></div>
+  `;
+  updateNpState();
+}
 function fmtTime(sec){
   sec = Math.max(0, Math.floor(sec || 0));
-  const m = Math.floor(sec / 60);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  return `${m}:${s.toString().padStart(2,'0')}`;
+  // Podcasts run past an hour, so show h:mm:ss when needed.
+  return h ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+           : `${m}:${s.toString().padStart(2, '0')}`;
 }
-
 function startProgressLoop(){
   if (state.progressTimer) clearInterval(state.progressTimer);
   state.progressTimer = setInterval(() => {
     if (!state.player || !state.ytReady || typeof state.player.getDuration !== 'function') return;
-    const dur = state.player.getDuration() || 0;
-    const cur = state.player.getCurrentTime() || 0;
+    // A cued (restored) video may not report its length until it plays.
+    const dur = state.player.getDuration() || (state.resumeAt ? state.duration : 0) || 0;
+    state.duration = dur;
+    // While a restored track is only cued, the player reports 0; show the
+    // saved position instead.
+    const cur = state.resumeAt || state.player.getCurrentTime() || 0;
     const fill = document.getElementById('progressFill');
     const tc = document.getElementById('timeCurrent');
     const tt = document.getElementById('timeTotal');
-    if (fill) fill.style.width = dur ? `${(cur/dur)*100}%` : '0%';
+    if (fill) fill.style.width = dur ? `${Math.min(100, (cur / dur) * 100)}%` : '0%';
     if (tc) tc.textContent = fmtTime(cur);
     if (tt) tt.textContent = fmtTime(dur);
+    if (state.isPlaying && Date.now() - state.lastSessionSave > 5000) {
+      state.lastSessionSave = Date.now();
+      saveSession();
+    }
   }, 500);
 }
 
-/* ---------- Media Session (lock screen metadata / controls, best-effort) ---------- */
 function updateMediaSession(){
   if (!('mediaSession' in navigator)) return;
   const meta = state.currentMeta || {};
   navigator.mediaSession.metadata = new MediaMetadata({
     title: meta.title || 'FLEX',
-    artist: meta.author_name || '',
+    artist: meta.author || '',
     album: 'FLEX',
-    artwork: state.pendingVideoId ? [
-      { src: `https://img.youtube.com/vi/${state.pendingVideoId}/mqdefault.jpg`, sizes: '320x180', type: 'image/jpeg' }
-    ] : []
+    artwork: meta.thumb ? [{ src: meta.thumb, sizes: '320x180', type: 'image/jpeg' }] : []
   });
-  navigator.mediaSession.setActionHandler('play', () => state.player && state.player.playVideo());
-  navigator.mediaSession.setActionHandler('pause', () => state.player && state.player.pauseVideo());
-  navigator.mediaSession.setActionHandler('seekbackward', () => seekBy(-10));
-  navigator.mediaSession.setActionHandler('seekforward', () => seekBy(10));
+  const handlers = {
+    play: () => state.player && state.player.playVideo(),
+    pause: () => state.player && state.player.pauseVideo(),
+    previoustrack: () => prevTrack(),
+    nexttrack: () => nextTrack(false),
+    seekbackward: (d) => seekBy(-((d && d.seekOffset) || 10)),
+    seekforward: (d) => seekBy((d && d.seekOffset) || 10),
+  };
+  Object.entries(handlers).forEach(([action, fn]) => {
+    try { navigator.mediaSession.setActionHandler(action, fn); } catch (e) {}
+  });
 }
-const _origFetchMeta = fetchMeta;
-fetchMeta = function(id){ _origFetchMeta(id); setTimeout(updateMediaSession, 300); };
 
-/* ---------- Init ---------- */
-renderMenu();
-setTitle('menu');
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ================= Drag reorder ================= */
+function enableDragReorder(listEl, itemsArrayRef, idKey, onCommit){
+  let dragRow = null;
+
+  Array.from(listEl.querySelectorAll('.drag-handle')).forEach((handle) => {
+    handle.addEventListener('pointerdown', (e) => {
+      dragRow = handle.closest('.list-row');
+      dragRow.classList.add('dragging');
+      try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+      thockSound(); vibrate(15);
+    });
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragRow) return;
+      const overEl = document.elementFromPoint(e.clientX, e.clientY);
+      const overRow = overEl && overEl.closest('.list-row');
+      if (overRow && overRow !== dragRow && overRow.parentElement === listEl) {
+        const rect = overRow.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+        listEl.insertBefore(dragRow, before ? overRow : overRow.nextSibling);
+        tickSound(); vibrate(4);
+      }
+    });
+    const commit = () => {
+      if (!dragRow) return;
+      dragRow.classList.remove('dragging');
+      dragRow = null;
+      const order = Array.from(listEl.children).map(r => r.dataset.itemId).filter(Boolean);
+      itemsArrayRef.sort((a, b) => order.indexOf(a[idKey]) - order.indexOf(b[idKey]));
+      saveState();
+      if (onCommit) onCommit();
+    };
+    handle.addEventListener('pointerup', commit);
+    handle.addEventListener('pointercancel', commit);
+  });
+}
+
+/* ================= Wheel: sound, haptics, gestures ================= */
+function ensureAudio(){
+  if (!state.audioCtx) {
+    try { state.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+  }
+  if (state.audioCtx && state.audioCtx.state === 'suspended') state.audioCtx.resume();
+}
+function playClick(freq, dur, vol){
+  if (!state.audioCtx) return;
+  const ctx = state.audioCtx;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'square';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime + dur);
+}
+function tickSound(){ playClick(1400, 0.02, 0.04); }
+function thockSound(){ playClick(280, 0.045, 0.07); }
+function vibrate(ms){ if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} } }
+
+function contextSelect(){
+  const entry = current();
+  if (entry.pane === 'menu') { pushPane(MENU_ITEMS[entry.index].go); return; }
+  if (entry.pane === 'playlists') {
+    if (entry.index === state.playlists.length) pushPane('newPlaylist');
+    else pushPane('playlistDetail', { playlistId: state.playlists[entry.index].id });
+    return;
+  }
+  if (entry.pane === 'playlistDetail') {
+    const pl = state.playlists.find(p => p.id === entry.playlistId);
+    if (!pl) return;
+    if (entry.editing) {
+      if (entry.index === pl.tracks.length) pushPane('newPlaylist', { playlistId: pl.id });
+      else if (entry.index === pl.tracks.length + 1) requestDeletePlaylist(entry, pl);
+      return;
+    }
+    if (entry.index === pl.tracks.length) pushPane('paste', { playlistId: pl.id });
+    else { setQueueFromPlaylist(pl.id, entry.index); pushPane('nowplaying'); }
+    return;
+  }
+  if (entry.pane === 'newPlaylist') { createPlaylistFromInput(); return; }
+  if (entry.pane === 'paste') { loadLinkFromInput(); return; }
+  if (entry.pane === 'settings') { activateSettingsRow(entry.index); return; }
+  if (entry.pane === 'nowplaying') { togglePlay(); return; }
+}
+
+const wheel = document.getElementById('wheel');
+
+function angleFromEvent(e){
+  const rect = wheel.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  return Math.atan2(e.clientY - cy, e.clientX - cx);
+}
+
+const DETENT = (2 * Math.PI) / 24;
+
+wheel.addEventListener('pointerdown', (e) => {
+  ensureAudio();
+  const hit = e.target.closest('[data-action]');
+  if (hit) {
+    const action = hit.dataset.action;
+    state.activePress = { action, longFired: false, timer: null, startAngle: angleFromEvent(e) };
+    if (action === 'prev' || action === 'next') {
+      state.activePress.timer = setTimeout(() => {
+        state.activePress.longFired = true;
+        startContinuousSeek(action === 'prev' ? -1 : 1);
+      }, 450);
+    }
+    if (hit.id === 'centerBtn') hit.classList.add('pressed');
+    thockSound(); vibrate(15);
+    try { wheel.setPointerCapture(e.pointerId); } catch (err) {}
+    return;
+  }
+  state.dragging = true;
+  state.lastAngle = angleFromEvent(e);
+  state.dragAccum = 0;
+  try { wheel.setPointerCapture(e.pointerId); } catch (err) {}
+});
+
+// Distance the thumb must travel around the ring before a touch that started
+// on MENU / ◀◀ / ▶▶ / ▶❚❚ turns into a scroll instead of a button press.
+const PRESS_TO_SCROLL = (2 * Math.PI) / 36;
+
+wheel.addEventListener('pointermove', (e) => {
+  const press = state.activePress;
+  if (press) {
+    if (press.action === 'select' || press.longFired) return;
+    let moved = angleFromEvent(e) - press.startAngle;
+    if (moved > Math.PI) moved -= 2 * Math.PI;
+    if (moved < -Math.PI) moved += 2 * Math.PI;
+    if (Math.abs(moved) < PRESS_TO_SCROLL) return;
+    if (press.timer) clearTimeout(press.timer);
+    state.activePress = null;
+    state.dragging = true;
+    state.lastAngle = press.startAngle;
+    state.dragAccum = 0;
+  }
+  if (!state.dragging) return;
+  const angle = angleFromEvent(e);
+  let delta = angle - state.lastAngle;
+  if (delta > Math.PI) delta -= 2 * Math.PI;
+  if (delta < -Math.PI) delta += 2 * Math.PI;
+  state.lastAngle = angle;
+  state.dragAccum += delta;
+  while (Math.abs(state.dragAccum) >= DETENT) {
+    const dir = state.dragAccum > 0 ? 1 : -1;
+    moveSelection(dir);
+    state.dragAccum -= dir * DETENT;
+  }
+});
+
+function endWheelPress(e){
+  document.getElementById('centerBtn').classList.remove('pressed');
+  if (state.activePress) {
+    if (state.activePress.timer) clearTimeout(state.activePress.timer);
+    if (state.activePress.longFired) {
+      stopContinuousSeek();
+    } else {
+      const action = state.activePress.action;
+      if (action === 'menu') popPane();
+      else if (action === 'select') contextSelect();
+      else if (action === 'play') togglePlay();
+      else if (action === 'prev') prevTrack();
+      else if (action === 'next') nextTrack(false);
+    }
+    state.activePress = null;
+    return;
+  }
+  state.dragging = false;
+  state.lastAngle = null;
+}
+wheel.addEventListener('pointerup', endWheelPress);
+wheel.addEventListener('pointercancel', endWheelPress);
+
+/* ================= Init ================= */
+(function restoreSession(){
+  const s = loadSession();
+  if (!s) return;
+  const q = s.queue;
+  state.queue = q;
+  state.currentMeta = q.tracks[q.currentIndex];
+  state.resumeAt = Math.max(0, s.position || 0);
+  state.duration = s.duration || 0;
+  state.pendingCue = state.currentMeta;
+  // Reopen straight onto Now Playing; MENU still goes back to the menu.
+  state.stack = [{ pane: 'menu', index: MENU_ITEMS.findIndex(m => m.go === 'nowplaying') }, { pane: 'nowplaying', index: 0 }];
+  updateMediaSession();
+})();
+render();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

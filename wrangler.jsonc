@@ -1,0 +1,9 @@
+// Cloudflare Workers config: FLEX is a static site, so the Worker just serves
+// the files in flex/ (no server code). "name" must match the Cloudflare project.
+{
+  "name": "flex",
+  "compatibility_date": "2026-09-21",
+  "assets": {
+    "directory": "./flex"
+  }
+}

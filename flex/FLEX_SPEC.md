@@ -11,23 +11,22 @@ This is **not** a YouTube downloader or stream ripper. It only ever uses YouTube
 - Primary: personal use on the creator's own Android phone.
 - Secondary: shared informally with a handful of friends as an installable link (no app store, no distribution/signing pipeline).
 
-## 3. Core user flow (MVP)
+## 3. Core user flow (current)
 
-1. Open FLEX (installed to home screen, opens full-screen, no browser chrome).
-2. Land on the **Menu** screen (`Paste Link`, `Now Playing`).
-3. Select `Paste Link` → paste a YouTube URL (or a "Paste" button reads the system clipboard) → `Load`.
+1. Open FLEX (installed to home screen, opens full-screen, no browser chrome). If something was playing last time, it reopens on **Now Playing** at the same spot, paused.
+2. Otherwise land on the **Menu** screen (`Playlists`, `Quick Play`, `Now Playing`, `Settings`).
+3. `Quick Play` → paste a YouTube URL (or a "Paste" button reads the system clipboard) → `Load`. Or `Playlists` → pick one → `+ Add Song` to save the link into a playlist.
 4. App extracts the video ID, loads it into a hidden YouTube IFrame player, fetches title/thumbnail via YouTube's oEmbed endpoint, and switches to **Now Playing**.
 5. Click wheel controls playback:
-   - Center button — play/pause (also acts as "select" in menus)
-   - Top (MENU) — back to menu
-   - Left / Right — seek back/forward 10s (rewind/fast-forward)
+   - Center button — select in menus; play/pause on Now Playing
+   - Top (MENU) — back
+   - Left / Right (◀◀ / ▶▶) — tap for previous/next track, hold to seek
    - Bottom (▶❚❚) — play/pause
-   - Dragging around the ring — volume, like the real click wheel's scroll gesture
-6. Now Playing shows title, channel/author, thumbnail-as-album-art, and a progress bar.
+   - Dragging around the ring (starting anywhere on it, including over the labels) — scrolls lists, or changes volume on Now Playing
+6. Now Playing shows title, channel/author, thumbnail-as-album-art, track position in the queue, a progress bar, and play state or any playback error.
 
-## 4. Explicitly out of scope for MVP
+## 4. Explicitly out of scope
 
-- Playlists / queueing multiple tracks
 - Search inside the app (user finds content in the YouTube app/site and shares/pastes the link into FLEX)
 - Downloads or offline playback of YouTube audio (this would violate YouTube's Terms of Service and is not something to build, ever)
 - iOS support (see §7 — background audio is far more restricted there and effectively requires YouTube Premium or a native app)
@@ -44,9 +43,9 @@ This is **not** a YouTube downloader or stream ripper. It only ever uses YouTube
 
 | File | Purpose |
 |---|---|
-| `index.html` | The entire app: UI, click wheel, state machine, YouTube integration |
+| `index.html` | The entire app: UI, click wheel, state machine, YouTube integration, playlists, persistence |
 | `manifest.json` | PWA metadata — name, icons, standalone display mode |
-| `service-worker.js` | Caches only the app shell (HTML/CSS/JS/icons); never caches YouTube content |
+| `service-worker.js` | Caches only the app shell (HTML/CSS/JS/icons), network-first so deploys show up immediately; never caches YouTube content |
 | `icon-192.png`, `icon-512.png` | Placeholder home-screen icons — replace with real artwork |
 
 No backend, no database, no API keys. It's a static site — deployable to any static host.
@@ -73,11 +72,43 @@ To install on Android once hosted:
 
 To share with friends: send them the URL; they do the same "Add to Home Screen" step themselves.
 
+**Deploying from GitHub:** the app lives in the `flex/` folder of the repo. The Cloudflare project (**Workers**, named `flex`) is connected to the GitHub repo, and `wrangler.jsonc` at the repo root tells it to serve `flex/` as static files — no build step, no server code. Every push to `main` deploys to production; pushes to other branches/PRs run a build check (and preview, if enabled). If the Cloudflare project is ever renamed, update `"name"` in `wrangler.jsonc` to match. (A Cloudflare **Pages** project would instead need Build command empty and Build output directory `flex`; a drag-and-drop project doesn't watch GitHub at all.)
+
+`manifest.json` uses relative `start_url`/`scope` (`./`), so the app installs correctly whether it's served from a domain root (`*.pages.dev`) or a subfolder (e.g. GitHub Pages at `/Flex/`).
+
+## 8a. Milestone 2 — playlists, media controls, full-screen skin (implemented)
+
+Built on top of the working MVP (confirmed: audio survives screen lock and app backgrounding on Android/Brave):
+
+- **Playlists**: create, view, add a YouTube link to a specific playlist (Menu → Playlists → pick one → + Add Song), and play any track in one (sets it as the active queue).
+- **Reorder**: a "Reorder" toggle in a playlist's track list turns on drag handles (☰); drag rows to reorder, order is saved on drop. Playlists themselves are not yet reorderable — tracks within a playlist are.
+- **Media controls**: proper next/previous track (not just seek), play/pause, and a three-state repeat mode (Off / Repeat All / Repeat One) set from Settings. Previous also restarts the current track if more than 3 seconds in, matching real iPod/media-player behavior.
+- **Full-screen layout**: the device now fills the entire viewport (`100dvw`/`100dvh`) with safe-area padding for notches, rather than sitting as a small card on a dark background.
+- **Wheel sound + haptics**: synthesized click-wheel "tick" sound (Web Audio, no external audio files) on every scroll detent and a lower "thock" on every button press, paired with `navigator.vibrate()` haptic pulses. Audio context is created lazily on first touch to satisfy browser autoplay policy.
+- **Wheel gestures unified**: dragging around the ring scrolls the highlighted item in list screens (menu/playlists/playlist detail/settings) and adjusts volume on the Now Playing screen — same physical gesture, context-dependent action, matching the real device. Side buttons (◀◀/▶▶) do a quick-tap for previous/next track, or a press-and-hold for continuous seek.
+- **Skin toggle**: Settings → Skin switches between a white/silver body and a black body via CSS custom properties (`data-skin` attribute), persisted to `localStorage`.
+- **Persistence**: playlists, skin choice, and repeat mode are saved to `localStorage` under a single `flex_state_v1` key and reloaded on launch.
+- Cache-busting reminder: the service worker's `CACHE_NAME` must be bumped (e.g. `v1` → `v2`) on every deploy that changes the app shell, or browsers (Brave in particular) will keep serving stale cached files even after redeploying — this bit us once already. (Since Milestone 3 the service worker is network-first, so this is a safety net rather than the only fix — but keep bumping it.)
+
+## 8b. Milestone 3 — resume, editing, fixes (implemented)
+
+- **Resume where you left off**: the queue, current track, playback position and track length are saved to `localStorage` under `flex_session_v1` (every ~5 s while playing, on pause, and when the app is hidden/closed). On launch FLEX reopens on Now Playing with that track *cued* at the saved position — not auto-played, because browsers only allow playback to start from a tap. Fixes the "reopen the app and it's blank" problem when Android discards the backgrounded tab.
+- **Edit playlists**: the playlist toolbar button is now `Edit` (was `Reorder`). In edit mode: drag ☰ to reorder, ✕ to delete a track, plus `Rename Playlist` and `Delete Playlist` rows. Deletes need two taps (the button turns into `Delete?` / `Tap again…`); scrolling the wheel disarms it.
+- **Live queue**: adding, removing or reordering tracks in the playlist that's playing updates the queue straight away. If the playing track is deleted it keeps playing and ▶▶ moves on to whatever followed it.
+- **Playback errors on Now Playing**: YouTube errors show on the Now Playing screen in plain words (e.g. "The owner has disabled playback outside YouTube."), and in a multi-track queue FLEX skips to the next track after 2.5 s. It stops skipping once every track in the queue has failed.
+- **Volume overlay**: spinning the wheel on Now Playing shows a volume bar with the level, which fades after ~1 s.
+- **Wheel**: a touch that starts on MENU / ◀◀ / ▶▶ / ▶❚❚ becomes a scroll once the thumb moves ~10° around the ring. Before this, a scroll from any of those zones counted as a button press (e.g. skipping the track).
+- **Layout**: the screen grows into the space the wheel doesn't need, so Now Playing no longer clips its bottom lines on tall phones; the wheel shrinks on short screens.
+- **Links**: stricter parsing — accepts `youtube.com`, `m.`, `music.`, `youtu.be`, `/shorts/`, `/embed/`, `/live/`, `/v/`; rejects anything that isn't an 11-character video ID.
+- **Lock screen**: Media Session now reports playing/paused state and supports seek backward/forward, and play/pause are separate actions rather than a single toggle.
+- **Times** over an hour show as `h:mm:ss` (podcasts).
+- **Service worker** `flex-shell-v3`, network-first for the app shell.
+
 ## 9. Open questions / next decisions
 
 - [ ] Test on the actual target phone: does audio survive screen lock in stock Chrome? In Firefox/Brave/Kiwi? With "desktop site" forced?
 - [ ] Real icon artwork — current icons are placeholders generated for testing installability only.
-- [ ] Is a "recently played" list (stored in `localStorage`) wanted for MVP, or is single-track-at-a-time enough?
+- [ ] Is a "recently played" list (stored in `localStorage`) wanted? (Resume-last-track is now done; a history list would be the next step.)
 - [ ] Visual polish pass on the iPod Nano 3rd gen chrome/click-wheel styling (current version is a first-pass approximation, not a pixel-perfect replica).
 - [ ] Decide whether volume-by-drag-on-wheel feels right, or whether a simpler up/down volume button pair is more reliable on touchscreens.
 
