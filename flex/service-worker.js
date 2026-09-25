@@ -1,5 +1,5 @@
 // Bump this on every deploy that changes the app shell.
-const CACHE_NAME = 'flex-shell-v3';
+const CACHE_NAME = 'flex-shell-v4';
 const SHELL_FILES = [
   './',
   './index.html',

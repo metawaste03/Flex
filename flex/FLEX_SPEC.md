@@ -14,8 +14,12 @@ This is **not** a YouTube downloader or stream ripper. It only ever uses YouTube
 ## 3. Core user flow (current)
 
 1. Open FLEX (installed to home screen, opens full-screen, no browser chrome). If something was playing last time, it reopens on **Now Playing** at the same spot, paused.
-2. Otherwise land on the **Menu** screen (`Playlists`, `Quick Play`, `Now Playing`, `Settings`).
-3. `Quick Play` → paste a YouTube URL (or a "Paste" button reads the system clipboard) → `Load`. Or `Playlists` → pick one → `+ Add Song` to save the link into a playlist.
+2. Otherwise land on the **Menu** screen (`Playlists`, `Recently Played`, `Quick Play`, `Now Playing`, `Settings`).
+3. Get a link in, any of three ways:
+   - In the YouTube app: **Share → FLEX** (installed app only). FLEX opens a "Shared Link" screen: `Play Now`, `Add to <playlist>`, or `Import Whole Playlist` for playlist links.
+   - `Quick Play` → paste a YouTube URL (or a "Paste" button reads the system clipboard) → `Load`.
+   - `Playlists` → pick one → `+ Add Song` to save the link into a playlist.
+   Playlist links (`list=`) also show a **Whole YouTube Playlist** button that imports every video.
 4. App extracts the video ID, loads it into a hidden YouTube IFrame player, fetches title/thumbnail via YouTube's oEmbed endpoint, and switches to **Now Playing**.
 5. Click wheel controls playback:
    - Center button — select in menus; play/pause on Now Playing
@@ -46,7 +50,7 @@ This is **not** a YouTube downloader or stream ripper. It only ever uses YouTube
 | `index.html` | The entire app: UI, click wheel, state machine, YouTube integration, playlists, persistence |
 | `manifest.json` | PWA metadata — name, icons, standalone display mode |
 | `service-worker.js` | Caches only the app shell (HTML/CSS/JS/icons), network-first so deploys show up immediately; never caches YouTube content |
-| `icon-192.png`, `icon-512.png` | Placeholder home-screen icons — replace with real artwork |
+| `icon-192.png`, `icon-512.png` | Home-screen icons (silver Nano face + click wheel), drawn to fit Android's maskable safe zone |
 
 No backend, no database, no API keys. It's a static site — deployable to any static host.
 
@@ -104,11 +108,23 @@ Built on top of the working MVP (confirmed: audio survives screen lock and app b
 - **Times** over an hour show as `h:mm:ss` (podcasts).
 - **Service worker** `flex-shell-v3`, network-first for the app shell.
 
+## 8c. Milestone 4 — sharing, history, podcasts, backup (implemented)
+
+- **Share to FLEX**: `manifest.json` declares a `share_target` (GET to `./?title&text&url`). Once FLEX is installed, it appears in Android's share sheet; the YouTube app puts the link inside `text`, so FLEX looks for the first `http(s)` URL in `url`, `text` and `title`. The query is stripped with `history.replaceState` so a reload doesn't reopen it. The Shared Link screen offers `Play Now`, `Add to <playlist>` (then opens that playlist) and, for playlist links, `Import Whole Playlist`. Autoplay rules still apply — playback starts from the user's tap on `Play Now`. *An already-installed FLEX only picks up the share target when Chrome refreshes the installed app (can take up to a day); removing and re-adding it to the home screen makes it immediate.*
+- **Home-screen shortcuts**: long-press the FLEX icon → `Recently Played` / `Quick Play` (`./?open=recent|quickplay`).
+- **Recently Played**: last 30 tracks, newest first, stored in `flex_state_v1` (`recent`). Selecting one plays it on its own. Videos that fail to play are dropped from the list. `Clear History` needs two taps.
+- **Per-episode resume**: for anything 10+ minutes long, the spot is saved per video in `flex_positions_v1` (with the other session saves: ~5 s while playing, on pause, when hidden). Starting that video again — from a playlist, Recently Played, a share — resumes there with a "Resuming at 20:34 — ◀◀ to start over" toast. Not saved in the first 15 s or last 30 s; cleared when the video ends. Capped at 100 entries (oldest dropped). Recently Played shows "resume 30:34 of 1:07:00".
+- **Shuffle** (Settings): the queue gets a shuffled play order of track ids (`queue.order` / `queue.orderPos`), starting with the track you picked; ◀◀/▶▶ walk that order. Repeat All reshuffles each lap without repeating the last track first. Editing the playlist mid-shuffle keeps what's already played and shuffles additions into the rest. Now Playing shows "Track 3 of 12 · shuffled" and 🔀.
+- **Sleep timer** (Settings): cycles Off → 15 → 30 → 45 → 60 min → End of track. The status bar shows `☾ 23m` / `☾ end`. Checked against a wall-clock deadline twice a second (robust to background timer throttling); at the deadline the volume fades out over ~8 s, playback pauses, and the volume is restored. "End of track" stops when the current track finishes instead of moving on. Not persisted across reloads.
+- **Backup** (Settings → Export / Import Backup): export downloads `flex-backup-YYYY-MM-DD.json` (playlists, recent, resume spots, settings). Import merges: playlists with the same id are replaced, new ones added; nothing is deleted. Every imported track is rebuilt from its video id (titles length-capped and always rendered as text), so a hand-edited or hostile file can't inject markup.
+- **Import a whole YouTube playlist**: uses a second hidden, muted IFrame player with `listType: 'playlist'` and the official `getPlaylist()` to read the video ids (YouTube caps this at 200), so current playback isn't interrupted. Titles are fetched via oEmbed six at a time; private/removed videos (oEmbed 401/403/404) are skipped and counted. From Quick Play it creates a new FLEX playlist named after the YouTube one; from a playlist's `+ Add Song` it appends. YouTube Mixes (`RD…` lists) generally can't be read and show an error.
+- **Toasts**: short messages at the top of the screen for confirmations and errors.
+- **Icons**: real artwork replaces the placeholders.
+- **Service worker** `flex-shell-v4`.
+
 ## 9. Open questions / next decisions
 
 - [ ] Test on the actual target phone: does audio survive screen lock in stock Chrome? In Firefox/Brave/Kiwi? With "desktop site" forced?
-- [ ] Real icon artwork — current icons are placeholders generated for testing installability only.
-- [ ] Is a "recently played" list (stored in `localStorage`) wanted? (Resume-last-track is now done; a history list would be the next step.)
 - [ ] Visual polish pass on the iPod Nano 3rd gen chrome/click-wheel styling (current version is a first-pass approximation, not a pixel-perfect replica).
 - [ ] Decide whether volume-by-drag-on-wheel feels right, or whether a simpler up/down volume button pair is more reliable on touchscreens.
 
