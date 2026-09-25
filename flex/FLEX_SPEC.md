@@ -70,9 +70,9 @@ These are platform limitations, not bugs to be fixed in code:
 FLEX is a static site — any static host works. Suggested: **Cloudflare Pages** (free, drag-and-drop deploy, gives a `*.pages.dev` URL, custom domain optional).
 
 To install on Android once hosted:
-1. Open the hosted URL in Chrome.
-2. Chrome menu → **Add to Home Screen** / **Install app**.
-3. Launches full-screen from the home screen icon, no Play Store involved.
+1. Open the hosted URL in **Chrome**. FLEX shows an **Install FLEX** popup — tap **Install**.
+2. Or: Chrome menu → **Add to Home screen** → choose **Install** (not "Create shortcut").
+3. Launches full-screen from the home screen icon, no Play Store involved. A real install shows up under Android **Settings → Apps**; a shortcut doesn't, and can't receive shares.
 
 To share with friends: send them the URL; they do the same "Add to Home Screen" step themselves.
 
@@ -118,6 +118,7 @@ Built on top of the working MVP (confirmed: audio survives screen lock and app b
 - **Sleep timer** (Settings): cycles Off → 15 → 30 → 45 → 60 min → End of track. The status bar shows `☾ 23m` / `☾ end`. Checked against a wall-clock deadline twice a second (robust to background timer throttling); at the deadline the volume fades out over ~8 s, playback pauses, and the volume is restored. "End of track" stops when the current track finishes instead of moving on. Not persisted across reloads.
 - **Backup** (Settings → Export / Import Backup): export downloads `flex-backup-YYYY-MM-DD.json` (playlists, recent, resume spots, settings). Import merges: playlists with the same id are replaced, new ones added; nothing is deleted. Every imported track is rebuilt from its video id (titles length-capped and always rendered as text), so a hand-edited or hostile file can't inject markup.
 - **Import a whole YouTube playlist**: uses a second hidden, muted IFrame player with `listType: 'playlist'` and the official `getPlaylist()` to read the video ids (YouTube caps this at 200), so current playback isn't interrupted. Titles are fetched via oEmbed six at a time; private/removed videos (oEmbed 401/403/404) are skipped and counted. From Quick Play it creates a new FLEX playlist named after the YouTube one; from a playlist's `+ Add Song` it appends. YouTube Mixes (`RD…` lists) generally can't be read and show an error.
+- **Install popup**: browsers never install a site by themselves — the most a page can do is ask, and the install still needs one tap. When Chrome / Edge / Samsung Internet signal FLEX is installable (`beforeinstallprompt`), FLEX shows its own "Install FLEX" popup; **Install** (or the wheel's centre button) triggers the browser's real install, which creates a proper Android app (a WebAPK) — required for Share → FLEX. Browsers without that API (iPhone Safari, Firefox, possibly Brave) get the manual steps for that browser after ~3 s. Never shown inside the installed app; "Not now" (or MENU, or declining in the browser dialog) snoozes it for 3 days; **Settings → Install FLEX** (browser tab only) reopens it any time. `manifest.json` also lists two `screenshots`, which Chrome shows in its fuller install dialog.
 - **Toasts**: short messages at the top of the screen for confirmations and errors.
 - **Icons**: real artwork replaces the placeholders.
 - **Service worker** `flex-shell-v4`.

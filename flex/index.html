@@ -200,6 +200,26 @@
   .toast.show{ opacity:1; transform:none; }
   .toast.error{ border-color:var(--danger); }
 
+  /* Install popup */
+  .install-sheet{
+    position:absolute; inset:0; z-index:6;
+    display:flex; align-items:flex-end; justify-content:center;
+    padding:10px; background:rgba(0,0,0,.55);
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .install-sheet.show{ opacity:1; pointer-events:auto; }
+  .install-card{
+    width:100%; border-radius:8px; padding:12px;
+    background:#10141a; border:1px solid #2a313b;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .install-head{ display:flex; align-items:center; gap:10px; }
+  .install-head img{ width:40px; height:40px; border-radius:9px; }
+  .install-title{ font-size:14px; font-weight:700; }
+  .install-sub{ font-size:10.5px; color:var(--screen-dim); }
+  .install-body{ font-size:11.5px; line-height:1.45; color:var(--screen-fg); }
+  .install-body ol{ margin:0; padding-left:18px; }
+
   .empty{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:var(--screen-dim); font-size:11.5px; text-align:center; padding: 0 16px;}
 
   /* click wheel */
@@ -310,6 +330,19 @@
         </div>
       </div>
       <div class="toast" id="toast"></div>
+      <div class="install-sheet" id="installSheet">
+        <div class="install-card">
+          <div class="install-head">
+            <img src="icon-192.png" alt="">
+            <div><div class="install-title">Install FLEX</div><div class="install-sub">Adds FLEX to your home screen as an app</div></div>
+          </div>
+          <div class="install-body" id="installBody"></div>
+          <div class="form-btn-row">
+            <div class="mini-btn" id="installLater">Not now</div>
+            <div class="mini-btn primary" id="installGo">Install</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -750,7 +783,7 @@ function settingsRows(){
     { label: 'Sleep Timer', value: sleepLabel(), run: cycleSleep },
     { label: 'Export Backup', value: '', run: exportBackup },
     { label: 'Import Backup', value: '', run: () => document.getElementById('importFile').click() },
-  ];
+  ].concat(isInstalled() ? [] : [{ label: 'Install FLEX', value: '', run: () => showInstallSheet(true) }]);
 }
 function renderSettings(entry){
   const el = document.getElementById('settingsList');
@@ -1294,6 +1327,76 @@ async function importYouTubePlaylist(listId, targetPlaylistId){
   }
 }
 
+/* ================= Install popup ================= */
+// Browsers never install a site on their own; the most a page can do is ask.
+// Chrome / Edge / Samsung Internet fire `beforeinstallprompt` when FLEX can be
+// installed; we hold on to it and show our own popup whose Install button
+// triggers the browser's real install (a proper Android app, which is what
+// "Share to FLEX" needs). Other browsers get short manual steps instead.
+const INSTALL_DISMISS_KEY = 'flex_install_dismissed_at';
+const INSTALL_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
+let deferredInstall = null;
+function isInstalled(){
+  return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+}
+function installSnoozed(){
+  try { return Date.now() - (+localStorage.getItem(INSTALL_DISMISS_KEY) || 0) < INSTALL_SNOOZE_MS; } catch (e) { return false; }
+}
+function manualInstallSteps(){
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) {
+    return '<ol><li>Tap the <b>Share</b> button in Safari</li><li>Choose <b>Add to Home Screen</b></li><li>Tap <b>Add</b></li></ol>';
+  }
+  return '<ol><li>Open the browser menu <b>⋮</b></li><li>Tap <b>Add to Home screen</b> (or <b>Install app</b>)</li>'
+    + '<li>If asked, choose <b>Install</b> — not "Create shortcut"</li></ol>'
+    + '<div class="install-sub" style="margin-top:6px">For Share → FLEX from the YouTube app, install using Chrome.</div>';
+}
+function showInstallSheet(force){
+  if (isInstalled()) { if (force) showToast('FLEX is already installed'); return; }
+  if (!force && installSnoozed()) return;
+  const canPrompt = !!deferredInstall;
+  document.getElementById('installBody').innerHTML = canPrompt
+    ? 'Opens full-screen from its own icon, and appears in your share menu so you can send YouTube links straight to it.'
+    : manualInstallSteps();
+  document.getElementById('installGo').textContent = canPrompt ? 'Install' : 'Got it';
+  document.getElementById('installSheet').classList.add('show');
+  state.installOpen = true;
+}
+function hideInstallSheet(snooze){
+  document.getElementById('installSheet').classList.remove('show');
+  state.installOpen = false;
+  if (snooze) { try { localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now())); } catch (e) {} }
+}
+async function runInstall(){
+  if (!deferredInstall) { hideInstallSheet(true); return; }
+  const ev = deferredInstall;
+  deferredInstall = null;           // a prompt event can only be used once
+  hideInstallSheet(false);
+  ev.prompt();
+  try {
+    const choice = await ev.userChoice;
+    if (choice.outcome !== 'accepted') hideInstallSheet(true);
+  } catch (e) {}
+}
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();               // use our popup instead of the browser's mini-bar
+  deferredInstall = e;
+  showInstallSheet(false);
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstall = null;
+  hideInstallSheet(false);
+  showToast('FLEX installed — open it from your home screen');
+});
+document.getElementById('installGo').addEventListener('click', runInstall);
+document.getElementById('installLater').addEventListener('click', () => hideInstallSheet(true));
+// Browsers without beforeinstallprompt (Safari, Firefox, some others): after a
+// moment, show the manual steps instead — once, then snoozed like "Not now".
+// Browsers that support the one-tap install can take a few seconds to offer
+// it, so wait longer before falling back there.
+setTimeout(() => { if (!deferredInstall && !state.installOpen) showInstallSheet(false); },
+  'onbeforeinstallprompt' in window ? 12000 : 3000);
+
 /* ================= YouTube playback / queue ================= */
 const YT_ERRORS = {
   2: 'Invalid video link.',
@@ -1738,6 +1841,11 @@ function endWheelPress(e){
       stopContinuousSeek();
     } else {
       const action = state.activePress.action;
+      if (state.installOpen && (action === 'menu' || action === 'select')) {
+        if (action === 'select') runInstall(); else hideInstallSheet(true);
+        state.activePress = null;
+        return;
+      }
       if (action === 'menu') popPane();
       else if (action === 'select') contextSelect();
       else if (action === 'play') togglePlay();
