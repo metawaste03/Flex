@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111214">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <style>
@@ -183,6 +184,42 @@
   .vol-fill{ height:100%; width:0%; background:var(--accent); }
   .vol-num{ width:24px; text-align:right; color:var(--screen-dim); }
 
+  .rows-header{ padding:8px 10px 6px; border-bottom:1px solid #1c2128; flex-shrink:0; display:none; }
+  .rows-header.show{ display:block; }
+  .rows-header .rh-title{ font-size:12.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rows-header .rh-sub{ font-size:10.5px; color:var(--screen-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mini-btn.hidden{ display:none; }
+
+  .toast{
+    position:absolute; left:10px; right:10px; top:56px; z-index:5;
+    padding:7px 9px; border-radius:5px; text-align:center;
+    background:rgba(8,10,13,.95); border:1px solid var(--accent); color:var(--screen-fg);
+    font-size:11px; line-height:1.35;
+    opacity:0; transform:translateY(-4px); transition:opacity .2s ease, transform .2s ease; pointer-events:none;
+  }
+  .toast.show{ opacity:1; transform:none; }
+  .toast.error{ border-color:var(--danger); }
+
+  /* Install popup */
+  .install-sheet{
+    position:absolute; inset:0; z-index:6;
+    display:flex; align-items:flex-end; justify-content:center;
+    padding:10px; background:rgba(0,0,0,.55);
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .install-sheet.show{ opacity:1; pointer-events:auto; }
+  .install-card{
+    width:100%; border-radius:8px; padding:12px;
+    background:#10141a; border:1px solid #2a313b;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .install-head{ display:flex; align-items:center; gap:10px; }
+  .install-head img{ width:40px; height:40px; border-radius:9px; }
+  .install-title{ font-size:14px; font-weight:700; }
+  .install-sub{ font-size:10.5px; color:var(--screen-dim); }
+  .install-body{ font-size:11.5px; line-height:1.45; color:var(--screen-fg); }
+  .install-body ol{ margin:0; padding-left:18px; }
+
   .empty{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:var(--screen-dim); font-size:11.5px; text-align:center; padding: 0 16px;}
 
   /* click wheel */
@@ -261,6 +298,9 @@
               <div class="mini-btn" id="pasteFromClipboard">Paste</div>
               <div class="mini-btn primary" id="loadLink">Load</div>
             </div>
+            <div class="form-btn-row">
+              <div class="mini-btn hidden" id="importListBtn">Whole YouTube Playlist</div>
+            </div>
             <div class="status-msg" id="pasteStatus"></div>
           </div>
         </div>
@@ -282,11 +322,32 @@
         <div class="pane" data-pane="settings">
           <div class="list" id="settingsList"></div>
         </div>
+
+        <!-- Generic list screen (Recently Played, Shared link) -->
+        <div class="pane" data-pane="rows">
+          <div class="rows-header" id="rowsHeader"><div class="rh-title" id="rowsHeaderTitle"></div><div class="rh-sub" id="rowsHeaderSub"></div></div>
+          <div class="list" id="rowsList"></div>
+        </div>
+      </div>
+      <div class="toast" id="toast"></div>
+      <div class="install-sheet" id="installSheet">
+        <div class="install-card">
+          <div class="install-head">
+            <img src="icon-192.png" alt="">
+            <div><div class="install-title">Install FLEX</div><div class="install-sub">Adds FLEX to your home screen as an app</div></div>
+          </div>
+          <div class="install-body" id="installBody"></div>
+          <div class="form-btn-row">
+            <div class="mini-btn" id="installLater">Not now</div>
+            <div class="mini-btn primary" id="installGo">Install</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <div id="ytMount" style="width:0;height:0;overflow:hidden;position:absolute;"></div>
+  <input type="file" id="importFile" accept=".json,application/json" style="display:none">
 
   <div class="wheel-wrap">
     <div class="wheel-zone" id="wheel">
@@ -316,10 +377,22 @@ function loadPersisted(){
 }
 const persisted = loadPersisted();
 
+/* Per-episode resume spots for long videos (podcasts): { videoId: {t, d, at} }.
+   Kept under their own key because they're written every few seconds while
+   playing, and the playlists don't need rewriting that often. */
+const POS_KEY = 'flex_positions_v1';
+function loadPositions(){
+  try { return JSON.parse(localStorage.getItem(POS_KEY)) || {}; } catch(e){ return {}; }
+}
+
 const state = {
   playlists: persisted.playlists || [],
   skin: persisted.skin || 'white',
   repeatMode: persisted.repeatMode || 'off',   // off | all | one
+  shuffle: !!persisted.shuffle,
+  recent: persisted.recent || [],              // newest first
+  positions: loadPositions(),
+  sleep: null,        // { option: minutes | 'track', at: timestamp | null }
   stack: [{ pane: 'menu', index: 0 }],
   player: null,
   ytReady: false,
@@ -343,7 +416,8 @@ const state = {
 function saveState(){
   try {
     localStorage.setItem(LS_KEY, JSON.stringify({
-      playlists: state.playlists, skin: state.skin, repeatMode: state.repeatMode
+      playlists: state.playlists, skin: state.skin, repeatMode: state.repeatMode,
+      shuffle: state.shuffle, recent: state.recent
     }));
   } catch(e){}
 }
@@ -359,26 +433,69 @@ function loadSession(){
   } catch(e){}
   return null;
 }
-function saveSession(){
+function saveSession(positionOverride){
   if (!state.queue || !state.currentMeta) return;
   // resumeAt is non-zero until the restored track actually starts playing;
   // before that the player reports 0 and would wipe the saved spot.
-  let position = state.resumeAt || 0;
+  let position = positionOverride != null ? positionOverride : (state.resumeAt || 0);
   try {
-    if (!position && state.player && state.ytReady && state.player.getCurrentTime) {
+    if (positionOverride == null && !position && state.player && state.ytReady && state.player.getCurrentTime) {
       position = state.player.getCurrentTime() || 0;
     }
   } catch(e){}
   try {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ queue: state.queue, position, duration: state.duration || 0 }));
   } catch(e){}
+  if (positionOverride == null) rememberPosition(state.currentMeta.videoId, position, state.duration);
+}
+
+const RESUME_MIN_LENGTH = 600;   // only remember spots in things 10+ minutes long
+const RESUME_MAX_ENTRIES = 100;
+function savePositions(){
+  try { localStorage.setItem(POS_KEY, JSON.stringify(state.positions)); } catch(e){}
+}
+function rememberPosition(videoId, t, d){
+  if (!videoId || !d || d < RESUME_MIN_LENGTH) return;
+  // Near the start (incl. after ◀◀ "start over") or near the end: nothing to resume.
+  if (t < 15 || t > d - 30) { forgetPosition(videoId); return; }
+  state.positions[videoId] = { t: Math.floor(t), d: Math.floor(d), at: Date.now() };
+  const keys = Object.keys(state.positions);
+  if (keys.length > RESUME_MAX_ENTRIES) {
+    keys.sort((a, b) => state.positions[a].at - state.positions[b].at)
+      .slice(0, keys.length - RESUME_MAX_ENTRIES)
+      .forEach(k => delete state.positions[k]);
+  }
+  savePositions();
+}
+function forgetPosition(videoId){
+  if (state.positions[videoId]) { delete state.positions[videoId]; savePositions(); }
+}
+
+/* ---- Recently played ---- */
+const RECENT_MAX = 30;
+function addRecent(track){
+  state.recent = [{ videoId: track.videoId, title: track.title, author: track.author || '' }]
+    .concat(state.recent.filter(r => r.videoId !== track.videoId))
+    .slice(0, RECENT_MAX);
+  saveState();
+}
+
+/* ---- Toast (short messages on the screen) ---- */
+function showToast(msg, isError){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.toggle('error', !!isError);
+  t.classList.add('show');
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveSession(); });
-window.addEventListener('pagehide', saveSession);
+window.addEventListener('pagehide', () => saveSession());
 function uid(){ return Math.random().toString(36).slice(2, 10); }
 
 const MENU_ITEMS = [
   { label: 'Playlists', go: 'playlists' },
+  { label: 'Recently Played', go: 'rows', extra: { kind: 'recent' } },
   { label: 'Quick Play', go: 'paste' },
   { label: 'Now Playing', go: 'nowplaying' },
   { label: 'Settings', go: 'settings' },
@@ -399,6 +516,7 @@ function paneTitle(entry){
     return pl ? pl.name : 'Playlist';
   }
   if (entry.pane === 'newPlaylist' && entry.playlistId) return 'Rename Playlist';
+  if (entry.pane === 'rows') return ROW_SCREENS[entry.kind].title;
   const titles = {
     menu: 'Menu', playlists: 'Playlists', newPlaylist: 'New Playlist',
     paste: 'Paste Link', nowplaying: 'Now Playing', settings: 'Settings'
@@ -418,6 +536,7 @@ function render(){
     document.getElementById('pasteHint').textContent = entry.playlistId
       ? 'Paste a link to add it to this playlist.'
       : "Paste a YouTube video or podcast link. Uses YouTube's own player — nothing is downloaded.";
+    updateImportListBtn();
     setTimeout(() => document.getElementById('linkInput').focus({ preventScroll: true }), 50);
   }
   if (entry.pane === 'newPlaylist') {
@@ -428,6 +547,7 @@ function render(){
     setTimeout(() => document.getElementById('newPlaylistInput').focus({ preventScroll: true }), 50);
   }
   if (entry.pane === 'settings') renderSettings(entry);
+  if (entry.pane === 'rows') renderRows(entry);
   if (entry.pane === 'nowplaying' && state.currentMeta) renderNowPlaying();
   if (entry.pane !== 'nowplaying') hideVolume();
 }
@@ -440,7 +560,8 @@ function listLength(entry){
     // + Add Song row normally; + Rename / Delete Playlist rows in edit mode
     return (pl ? pl.tracks.length : 0) + (entry.editing ? 2 : 1);
   }
-  if (entry.pane === 'settings') return 2; // Skin, Repeat
+  if (entry.pane === 'settings') return settingsRows().length;
+  if (entry.pane === 'rows') return ROW_SCREENS[entry.kind].rows(entry).length;
   return 0;
 }
 
@@ -456,6 +577,7 @@ function moveSelection(direction){
   if (entry.pane === 'playlists') renderPlaylists(entry);
   if (entry.pane === 'playlistDetail') renderPlaylistDetail(entry);
   if (entry.pane === 'settings') renderSettings(entry);
+  if (entry.pane === 'rows') renderRows(entry);
 }
 
 /* ---- Menu pane ---- */
@@ -466,7 +588,7 @@ function renderMenu(entry){
     const row = document.createElement('div');
     row.className = 'list-row' + (i === entry.index ? ' selected' : '');
     row.innerHTML = `<span class="row-main">${item.label}</span><span class="chev">›</span>`;
-    row.addEventListener('click', () => { entry.index = i; pushPane(item.go); });
+    row.addEventListener('click', () => { entry.index = i; pushPane(item.go, item.extra); });
     el.appendChild(row);
   });
 }
@@ -610,6 +732,17 @@ function syncQueueWithPlaylist(pl){
     q.currentIndex = (followerIdx === undefined ? pl.tracks.length : followerIdx) - 1;
   }
   q.tracks = pl.tracks.slice();
+  if (q.order) {
+    // Same idea for the shuffle order: drop removed tracks, keep what's been
+    // played before the current spot, and shuffle new tracks into the rest.
+    const ids = new Set(pl.tracks.map(t => t.id));
+    const known = new Set(q.order);
+    const before = q.order.slice(0, q.orderPos + 1).filter(id => ids.has(id));
+    const after = q.order.slice(q.orderPos + 1).filter(id => ids.has(id));
+    const added = shuffled(pl.tracks.map(t => t.id).filter(id => !known.has(id)));
+    q.order = before.concat(shuffled(after.concat(added)));
+    q.orderPos = before.length - 1;
+  }
   saveSession();
   if (current().pane === 'nowplaying') renderNowPlaying();
 }
@@ -640,14 +773,22 @@ function createPlaylistFromInput(){
 }
 
 /* ---- Settings pane ---- */
+function settingsRows(){
+  return [
+    { label: 'Skin', value: state.skin === 'black' ? 'Black' : 'White',
+      run: () => setSkin(state.skin === 'black' ? 'white' : 'black') },
+    { label: 'Repeat', value: state.repeatMode === 'off' ? 'Off' : state.repeatMode === 'all' ? 'All' : 'One',
+      run: cycleRepeatMode },
+    { label: 'Shuffle', value: state.shuffle ? 'On' : 'Off', run: toggleShuffle },
+    { label: 'Sleep Timer', value: sleepLabel(), run: cycleSleep },
+    { label: 'Export Backup', value: '', run: exportBackup },
+    { label: 'Import Backup', value: '', run: () => document.getElementById('importFile').click() },
+  ].concat(isInstalled() ? [] : [{ label: 'Install FLEX', value: '', run: () => showInstallSheet(true) }]);
+}
 function renderSettings(entry){
   const el = document.getElementById('settingsList');
   el.innerHTML = '';
-  const rows = [
-    { label: 'Skin', value: state.skin === 'black' ? 'Black' : 'White' },
-    { label: 'Repeat', value: state.repeatMode === 'off' ? 'Off' : state.repeatMode === 'all' ? 'All' : 'One' },
-  ];
-  rows.forEach((r, i) => {
+  settingsRows().forEach((r, i) => {
     const row = document.createElement('div');
     row.className = 'list-row' + (i === entry.index ? ' selected' : '');
     row.innerHTML = `<span class="row-main">${r.label}</span><span class="row-sub" style="text-align:right;flex-shrink:0;">${r.value}</span>`;
@@ -656,9 +797,9 @@ function renderSettings(entry){
   });
 }
 function activateSettingsRow(i){
-  if (i === 0) { setSkin(state.skin === 'black' ? 'white' : 'black'); }
-  if (i === 1) { cycleRepeatMode(); }
-  renderSettings(current());
+  const r = settingsRows()[i];
+  if (r) r.run();
+  if (current().pane === 'settings') renderSettings(current());
 }
 function setSkin(skin){
   state.skin = skin;
@@ -679,6 +820,7 @@ document.getElementById('pasteFromClipboard').addEventListener('click', async ()
   try {
     const text = await navigator.clipboard.readText();
     linkInput.value = text.trim();
+    updateImportListBtn();
     pasteStatus.textContent = 'Pasted from clipboard.';
     pasteStatus.classList.remove('error');
   } catch (err) {
@@ -705,16 +847,33 @@ function extractVideoId(url){
   return id && VIDEO_ID_RE.test(id) ? id : null;
 }
 
-function fetchTrackMeta(id){
+// strict: resolve to null when YouTube says the video is private/removed
+// (so playlist imports can skip it); otherwise fall back to empty metadata.
+function fetchTrackMeta(id, strict){
   return fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`)
-    .then(r => r.ok ? r.json() : {})
+    .then(r => r.ok ? r.json() : (strict && [401, 403, 404].includes(r.status) ? null : {}))
     .catch(() => ({}));
 }
+
+function updateImportListBtn(){
+  const listId = extractListId(document.getElementById('linkInput').value);
+  const btn = document.getElementById('importListBtn');
+  btn.classList.toggle('hidden', !listId);
+  btn.textContent = current().playlistId ? 'Add Whole YouTube Playlist' : 'Import Whole YouTube Playlist';
+}
+document.getElementById('linkInput').addEventListener('input', updateImportListBtn);
+document.getElementById('importListBtn').addEventListener('click', () => {
+  const listId = extractListId(document.getElementById('linkInput').value);
+  if (listId) importYouTubePlaylist(listId, current().playlistId || null);
+});
 
 function loadLinkFromInput(){
   const linkInput = document.getElementById('linkInput');
   const pasteStatus = document.getElementById('pasteStatus');
   const id = extractVideoId(linkInput.value);
+  // A playlist link with no single video in it: import the whole thing.
+  const listOnly = !id && extractListId(linkInput.value);
+  if (listOnly) { importYouTubePlaylist(listOnly, current().playlistId || null); return; }
   if (!id) {
     pasteStatus.textContent = 'Could not read a video from that link.';
     pasteStatus.classList.add('error');
@@ -723,12 +882,7 @@ function loadLinkFromInput(){
   pasteStatus.textContent = 'Loading…';
   pasteStatus.classList.remove('error');
   fetchTrackMeta(id).then(meta => {
-    const track = {
-      id: uid(), videoId: id,
-      title: meta.title || 'Untitled',
-      author: meta.author_name || '',
-      thumb: `https://img.youtube.com/vi/${id}/mqdefault.jpg`
-    };
+    const track = makeTrack(id, meta);
     const entry = current();
     if (entry.playlistId) {
       const pl = state.playlists.find(p => p.id === entry.playlistId);
@@ -738,21 +892,510 @@ function loadLinkFromInput(){
         syncQueueWithPlaylist(pl);
         pasteStatus.textContent = `Added to ${pl.name}.`;
         linkInput.value = '';
+        updateImportListBtn();
         setTimeout(() => popPane(), 500);
       }
     } else {
       pasteStatus.textContent = '';
-      state.queue = { tracks: [track], currentIndex: 0, playlistId: null };
       linkInput.value = '';
-      state.stack.pop();
-      pushPane('nowplaying');
-      playTrackAtQueueIndex(0);
+      updateImportListBtn();
+      playSingle(track);
     }
   }).catch(() => {
     pasteStatus.textContent = 'That link could not be loaded.';
     pasteStatus.classList.add('error');
   });
 }
+
+/* ================= List screens: Recently Played, Shared link ================= */
+// Each screen builds its rows on demand: { label, sub?, chev?, danger?, run }.
+const ROW_SCREENS = {
+  recent: { title: 'Recently Played', empty: 'Nothing played yet.', rows: recentRows },
+  shared: { title: 'Shared Link', empty: "That link isn't a YouTube video or playlist.", rows: sharedRows },
+};
+
+function renderRows(entry){
+  const screen = ROW_SCREENS[entry.kind];
+  const rows = screen.rows(entry);
+  const header = document.getElementById('rowsHeader');
+  header.classList.toggle('show', !!entry.header);
+  document.getElementById('rowsHeaderTitle').textContent = entry.header ? entry.header.title : '';
+  document.getElementById('rowsHeaderSub').textContent = entry.header ? entry.header.sub : '';
+  const el = document.getElementById('rowsList');
+  el.innerHTML = '';
+  if (!rows.length) {
+    el.innerHTML = `<div class="list-empty">${escapeHtml(screen.empty)}</div>`;
+    return;
+  }
+  if (entry.index >= rows.length) entry.index = rows.length - 1;
+  rows.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'list-row' + (r.danger ? ' danger' : '') + (i === entry.index ? ' selected' : '');
+    row.innerHTML = `<span class="row-main">${escapeHtml(r.label)}${r.sub ? `<span class="row-sub">${escapeHtml(r.sub)}</span>` : ''}</span>`
+      + (r.chev ? `<span class="chev">${r.chev}</span>` : '');
+    row.addEventListener('click', () => { entry.index = i; r.run(); });
+    el.appendChild(row);
+  });
+}
+function activateRow(entry){
+  const r = ROW_SCREENS[entry.kind].rows(entry)[entry.index];
+  if (r) r.run();
+}
+
+function recentRows(entry){
+  const rows = state.recent.map(r => {
+    const pos = state.positions[r.videoId];
+    const resume = pos ? `resume ${fmtTime(pos.t)} of ${fmtTime(pos.d)}` : '';
+    return {
+      label: r.title,
+      sub: [r.author, resume].filter(Boolean).join(' · '),
+      chev: '▶',
+      run: () => { entry.index = 0; playSingle(makeTrack(r.videoId, { title: r.title, author_name: r.author })); },
+    };
+  });
+  if (rows.length) rows.push({
+    label: entry.confirmDelete === 'recent' ? 'Tap again to clear history' : 'Clear History',
+    danger: true,
+    run: () => {
+      if (entry.confirmDelete !== 'recent') { entry.confirmDelete = 'recent'; thockSound(); vibrate(15); renderRows(entry); return; }
+      entry.confirmDelete = null;
+      state.recent = [];
+      saveState();
+      entry.index = 0;
+      vibrate([10, 40, 10]);
+      renderRows(entry);
+    },
+  });
+  return rows;
+}
+
+function sharedRows(entry){
+  const rows = [];
+  if (entry.videoId) {
+    const track = () => makeTrack(entry.videoId, entry.meta || {});
+    rows.push({ label: 'Play Now', chev: '▶', run: () => playSingle(track()) });
+    state.playlists.forEach(pl => rows.push({
+      label: `Add to ${pl.name}`,
+      sub: `${pl.tracks.length} track${pl.tracks.length === 1 ? '' : 's'}`,
+      run: () => {
+        pl.tracks.push(track());
+        saveState();
+        syncQueueWithPlaylist(pl);
+        showToast(`Added to ${pl.name}`);
+        openPlaylist(pl, pl.tracks.length - 1);
+      },
+    }));
+  }
+  if (entry.listId) rows.push({
+    label: 'Import Whole Playlist',
+    sub: 'Saves every video as a new FLEX playlist',
+    run: () => importYouTubePlaylist(entry.listId, null),
+  });
+  return rows;
+}
+
+function makeTrack(videoId, meta){
+  return {
+    id: uid(), videoId,
+    title: meta.title || 'Untitled',
+    author: meta.author_name || '',
+    thumb: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+  };
+}
+function playSingle(track){
+  state.queue = { tracks: [track], currentIndex: 0, playlistId: null };
+  state.errorStreak = 0;
+  state.stack = [{ pane: 'menu', index: MENU_ITEMS.findIndex(m => m.go === 'nowplaying') }];
+  pushPane('nowplaying');
+  playTrackAtQueueIndex(0);
+}
+function openPlaylist(pl, trackIndex){
+  state.stack = [
+    { pane: 'menu', index: 0 },
+    { pane: 'playlists', index: Math.max(0, state.playlists.indexOf(pl)) },
+    { pane: 'playlistDetail', index: Math.max(0, trackIndex || 0), playlistId: pl.id },
+  ];
+  render();
+}
+
+/* ================= Share to FLEX ================= */
+// The manifest's share_target makes FLEX appear in Android's share sheet once
+// installed. A share opens ./?title=…&text=…&url=… — the YouTube app puts the
+// link in "text", other apps in "url", so look for a link in all three.
+function findUrl(text){
+  const m = String(text || '').match(/https?:\/\/[^\s<>"']+/);
+  return m ? m[0] : null;
+}
+function readSharedLink(){
+  const p = new URLSearchParams(location.search);
+  if (!p.has('url') && !p.has('text') && !p.has('title')) return undefined;
+  // Drop the query so a reload doesn't re-open the share screen.
+  history.replaceState(null, '', location.pathname);
+  return findUrl(p.get('url')) || findUrl(p.get('text')) || findUrl(p.get('title')) || '';
+}
+function openSharedLink(link){
+  const entry = {
+    pane: 'rows', kind: 'shared', index: 0,
+    videoId: extractVideoId(link || ''), listId: extractListId(link || ''), meta: null,
+  };
+  state.stack = [{ pane: 'menu', index: 0 }, entry];
+  if (entry.videoId) {
+    entry.header = { title: 'Loading…', sub: '' };
+    fetchTrackMeta(entry.videoId).then(meta => {
+      entry.meta = meta;
+      entry.header = { title: meta.title || 'YouTube video', sub: meta.author_name || '' };
+      if (current() === entry) renderRows(entry);
+    });
+  } else if (entry.listId) {
+    entry.header = { title: 'YouTube playlist', sub: '' };
+  }
+  render();
+}
+
+/* ================= Shuffle ================= */
+function shuffled(arr){
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+// q.order is the play order as track ids; q.orderPos is where we are in it.
+// Ids (not indexes) so it survives the playlist being edited.
+function buildShuffleOrder(q, firstId){
+  const rest = shuffled(q.tracks.map(t => t.id).filter(id => id !== firstId));
+  q.order = firstId ? [firstId].concat(rest) : rest;
+  q.orderPos = firstId ? 0 : -1;
+}
+function toggleShuffle(){
+  state.shuffle = !state.shuffle;
+  saveState();
+  const q = state.queue;
+  if (q) {
+    if (state.shuffle) {
+      const cur = q.tracks[q.currentIndex];
+      buildShuffleOrder(q, cur && state.currentMeta && cur.id === state.currentMeta.id ? cur.id : null);
+    } else {
+      delete q.order; delete q.orderPos;
+    }
+    saveSession();
+  }
+  showToast(state.shuffle ? 'Shuffle on' : 'Shuffle off');
+}
+function playTrackById(id){
+  const i = state.queue.tracks.findIndex(t => t.id === id);
+  if (i >= 0) playTrackAtQueueIndex(i);
+}
+
+/* ================= Sleep timer ================= */
+const SLEEP_OPTIONS = [0, 15, 30, 45, 60, 'track'];
+function cycleSleep(){
+  const cur = state.sleep ? SLEEP_OPTIONS.indexOf(state.sleep.option) : 0;
+  const next = SLEEP_OPTIONS[(cur + 1) % SLEEP_OPTIONS.length];
+  state.sleep = next === 0 ? null : { option: next, at: next === 'track' ? null : Date.now() + next * 60000 };
+  updateSleepBadge();
+  showToast(!state.sleep ? 'Sleep timer off'
+    : next === 'track' ? 'Will stop at the end of this track' : `Will stop in ${next} minutes`);
+}
+function sleepLabel(){
+  if (!state.sleep) return 'Off';
+  if (state.sleep.option === 'track') return 'End of track';
+  return `${Math.max(1, Math.ceil((state.sleep.at - Date.now()) / 60000))} min left`;
+}
+function updateSleepBadge(){
+  const text = !state.sleep ? 'FLEX'
+    : state.sleep.option === 'track' ? 'FLEX ☾ end' : `FLEX ☾ ${sleepLabel().replace(' min left', 'm')}`;
+  const el = document.getElementById('sbLeft');
+  if (el.textContent !== text) {
+    el.textContent = text;
+    if (current().pane === 'settings') renderSettings(current());
+  }
+}
+// Checked from the progress loop (twice a second) against a wall-clock
+// deadline, so it stays accurate even if timers are slowed in the background.
+function checkSleep(){
+  if (!state.sleep) return;
+  if (state.sleep.at && Date.now() >= state.sleep.at) {
+    state.sleep = null;
+    updateSleepBadge();
+    fadeOutAndPause();
+  } else {
+    updateSleepBadge();
+  }
+}
+function fadeOutAndPause(){
+  if (!state.player || !state.isPlaying) return;
+  const start = state.volume != null ? state.volume : (state.player.getVolume ? state.player.getVolume() : 100);
+  const steps = 20;
+  let step = 0;
+  clearInterval(state.fadeTimer);
+  state.fadeTimer = setInterval(() => {
+    step++;
+    state.player.setVolume(Math.round(start * (1 - step / steps)));
+    if (step >= steps) {
+      clearInterval(state.fadeTimer);
+      state.player.pauseVideo();
+      state.player.setVolume(start);   // back to normal for next time
+    }
+  }, 400);
+}
+
+/* ================= Backup: export / import ================= */
+function exportBackup(){
+  const data = {
+    app: 'FLEX', version: 1, exportedAt: new Date().toISOString(),
+    playlists: state.playlists, recent: state.recent, positions: state.positions,
+    settings: { skin: state.skin, repeatMode: state.repeatMode, shuffle: state.shuffle },
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `flex-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  showToast(`Backup saved — ${state.playlists.length} playlist${state.playlists.length === 1 ? '' : 's'}`);
+}
+// Backups are just JSON the user picked, so rebuild every track from its
+// video id rather than trusting the file's fields.
+function cleanTrack(t){
+  if (!t || typeof t.videoId !== 'string' || !VIDEO_ID_RE.test(t.videoId)) return null;
+  return {
+    id: typeof t.id === 'string' && /^[a-z0-9]{1,20}$/i.test(t.id) ? t.id : uid(),
+    videoId: t.videoId,
+    title: String(t.title || 'Untitled').slice(0, 300),
+    author: String(t.author || '').slice(0, 200),
+    thumb: `https://img.youtube.com/vi/${t.videoId}/mqdefault.jpg`,
+  };
+}
+function importBackup(data){
+  if (!data || data.app !== 'FLEX' || !Array.isArray(data.playlists)) throw new Error('not a FLEX backup');
+  let added = 0, updated = 0;
+  data.playlists.forEach(p => {
+    if (!p || typeof p.name !== 'string' || !Array.isArray(p.tracks)) return;
+    const pl = {
+      id: typeof p.id === 'string' && /^[a-z0-9]{1,20}$/i.test(p.id) ? p.id : uid(),
+      name: p.name.slice(0, 100) || 'Playlist',
+      tracks: p.tracks.map(cleanTrack).filter(Boolean),
+    };
+    const i = state.playlists.findIndex(x => x.id === pl.id);
+    if (i >= 0) { state.playlists[i] = pl; updated++; } else { state.playlists.push(pl); added++; }
+  });
+  if (Array.isArray(data.recent)) {
+    const have = new Set(state.recent.map(r => r.videoId));
+    const extra = data.recent.map(cleanTrack).filter(t => t && !have.has(t.videoId))
+      .map(t => ({ videoId: t.videoId, title: t.title, author: t.author }));
+    state.recent = state.recent.concat(extra).slice(0, RECENT_MAX);
+  }
+  if (data.positions && typeof data.positions === 'object') {
+    Object.entries(data.positions).forEach(([vid, p]) => {
+      if (VIDEO_ID_RE.test(vid) && p && isFinite(p.t) && isFinite(p.d) && !state.positions[vid]) {
+        state.positions[vid] = { t: +p.t, d: +p.d, at: isFinite(p.at) ? +p.at : Date.now() };
+      }
+    });
+    savePositions();
+  }
+  const st = data.settings || {};
+  if (st.skin === 'white' || st.skin === 'black') setSkin(st.skin);
+  if (['off', 'all', 'one'].includes(st.repeatMode)) state.repeatMode = st.repeatMode;
+  if (typeof st.shuffle === 'boolean' && st.shuffle !== state.shuffle) toggleShuffle();
+  saveState();
+  state.playlists.forEach(syncQueueWithPlaylist);
+  return { added, updated };
+}
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  file.text()
+    .then(text => {
+      const { added, updated } = importBackup(JSON.parse(text));
+      showToast(`Backup imported — ${added} new, ${updated} updated playlist${added + updated === 1 ? '' : 's'}`);
+      render();
+    })
+    .catch(() => showToast("That file isn't a FLEX backup.", true));
+});
+
+/* ================= Import a whole YouTube playlist ================= */
+const LIST_ID_RE = /^[A-Za-z0-9_-]{10,64}$/;
+function extractListId(url){
+  try {
+    const u = new URL(url.trim());
+    const host = u.hostname.replace(/^(www|m|music)\./, '');
+    if (host !== 'youtube.com' && host !== 'youtu.be') return null;
+    const id = u.searchParams.get('list');
+    return id && LIST_ID_RE.test(id) ? id : null;
+  } catch (err) { return null; }
+}
+function waitForYouTubeApi(){
+  return new Promise(resolve => {
+    const tick = () => (state.ytReady && window.YT && YT.Player) ? resolve() : setTimeout(tick, 150);
+    tick();
+  });
+}
+// Reads the video ids of a playlist with a second, hidden and muted YouTube
+// player (the official IFrame API's getPlaylist), so whatever is playing on
+// the main player isn't interrupted. YouTube caps this at 200 videos.
+function resolveYouTubePlaylist(listId){
+  return waitForYouTubeApi().then(() => new Promise((resolve, reject) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:0;height:0;overflow:hidden;position:absolute;';
+    const host = document.createElement('div');
+    wrap.appendChild(host);
+    document.body.appendChild(wrap);
+    let done = false, poll = null, player = null;
+    const finish = (ids, err) => {
+      if (done) return;
+      done = true;
+      clearInterval(poll);
+      clearTimeout(timeout);
+      try { player.destroy(); } catch (e) {}
+      wrap.remove();
+      if (ids) resolve(ids); else reject(err);
+    };
+    const timeout = setTimeout(() => finish(null, new Error('timed out')), 20000);
+    player = new YT.Player(host, {
+      height: '1', width: '1',
+      playerVars: { listType: 'playlist', list: listId, playsinline: 1, controls: 0, autoplay: 0, mute: 1 },
+      events: {
+        onReady: () => {
+          poll = setInterval(() => {
+            let ids = null;
+            try { ids = player.getPlaylist(); } catch (e) {}
+            if (ids && ids.length) finish(ids.filter(id => VIDEO_ID_RE.test(id)));
+          }, 300);
+        },
+        // The first video failing (e.g. embedding disabled) doesn't mean the
+        // list is unreadable; give getPlaylist a moment before giving up.
+        onError: () => setTimeout(() => finish(null, new Error('playlist unavailable')), 2500),
+      },
+    });
+  }));
+}
+async function importYouTubePlaylist(listId, targetPlaylistId){
+  if (state.importing) return;
+  state.importing = true;
+  const say = (msg, isError) => {
+    showToast(msg, isError);
+    if (current().pane === 'paste') {
+      const ps = document.getElementById('pasteStatus');
+      ps.textContent = msg;
+      ps.classList.toggle('error', !!isError);
+    }
+  };
+  say('Reading YouTube playlist…');
+  try {
+    const ids = await resolveYouTubePlaylist(listId);
+    const listMeta = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent('https://www.youtube.com/playlist?list=' + listId)}&format=json`)
+      .then(r => r.ok ? r.json() : {}).catch(() => ({}));
+    // Look up titles a few at a time; private/removed videos (oEmbed 401/404)
+    // are left out.
+    const tracks = new Array(ids.length);
+    let next = 0, finished = 0, skipped = 0;
+    const worker = async () => {
+      while (next < ids.length) {
+        const i = next++;
+        const meta = await fetchTrackMeta(ids[i], true);
+        if (meta) tracks[i] = makeTrack(ids[i], meta); else skipped++;
+        finished++;
+        if (finished % 5 === 0 || finished === ids.length) say(`Importing ${finished} of ${ids.length}…`);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(6, ids.length) }, worker));
+    const found = tracks.filter(Boolean);
+    if (!found.length) throw new Error('no playable videos');
+    let pl = targetPlaylistId && state.playlists.find(p => p.id === targetPlaylistId);
+    if (pl) pl.tracks.push(...found);
+    else {
+      pl = { id: uid(), name: String(listMeta.title || 'YouTube Playlist').slice(0, 100), tracks: found };
+      state.playlists.push(pl);
+    }
+    saveState();
+    syncQueueWithPlaylist(pl);
+    document.getElementById('linkInput').value = '';
+    document.getElementById('pasteStatus').textContent = '';
+    updateImportListBtn();
+    openPlaylist(pl, 0);
+    showToast(`Added ${found.length} video${found.length === 1 ? '' : 's'} to ${pl.name}`
+      + (skipped ? ` (${skipped} unavailable skipped)` : ''));
+  } catch (e) {
+    say("Couldn't read that playlist — it may be private, or a YouTube Mix.", true);
+  } finally {
+    state.importing = false;
+  }
+}
+
+/* ================= Install popup ================= */
+// Browsers never install a site on their own; the most a page can do is ask.
+// Chrome / Edge / Samsung Internet fire `beforeinstallprompt` when FLEX can be
+// installed; we hold on to it and show our own popup whose Install button
+// triggers the browser's real install (a proper Android app, which is what
+// "Share to FLEX" needs). Other browsers get short manual steps instead.
+const INSTALL_DISMISS_KEY = 'flex_install_dismissed_at';
+const INSTALL_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
+let deferredInstall = null;
+function isInstalled(){
+  return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+}
+function installSnoozed(){
+  try { return Date.now() - (+localStorage.getItem(INSTALL_DISMISS_KEY) || 0) < INSTALL_SNOOZE_MS; } catch (e) { return false; }
+}
+function manualInstallSteps(){
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) {
+    return '<ol><li>Tap the <b>Share</b> button in Safari</li><li>Choose <b>Add to Home Screen</b></li><li>Tap <b>Add</b></li></ol>';
+  }
+  return '<ol><li>Open the browser menu <b>⋮</b></li><li>Tap <b>Add to Home screen</b> (or <b>Install app</b>)</li>'
+    + '<li>If asked, choose <b>Install</b> — not "Create shortcut"</li></ol>'
+    + '<div class="install-sub" style="margin-top:6px">For Share → FLEX from the YouTube app, install using Chrome.</div>';
+}
+function showInstallSheet(force){
+  if (isInstalled()) { if (force) showToast('FLEX is already installed'); return; }
+  if (!force && installSnoozed()) return;
+  const canPrompt = !!deferredInstall;
+  document.getElementById('installBody').innerHTML = canPrompt
+    ? 'Opens full-screen from its own icon, and appears in your share menu so you can send YouTube links straight to it.'
+    : manualInstallSteps();
+  document.getElementById('installGo').textContent = canPrompt ? 'Install' : 'Got it';
+  document.getElementById('installSheet').classList.add('show');
+  state.installOpen = true;
+}
+function hideInstallSheet(snooze){
+  document.getElementById('installSheet').classList.remove('show');
+  state.installOpen = false;
+  if (snooze) { try { localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now())); } catch (e) {} }
+}
+async function runInstall(){
+  if (!deferredInstall) { hideInstallSheet(true); return; }
+  const ev = deferredInstall;
+  deferredInstall = null;           // a prompt event can only be used once
+  hideInstallSheet(false);
+  ev.prompt();
+  try {
+    const choice = await ev.userChoice;
+    if (choice.outcome !== 'accepted') hideInstallSheet(true);
+  } catch (e) {}
+}
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();               // use our popup instead of the browser's mini-bar
+  deferredInstall = e;
+  showInstallSheet(false);
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstall = null;
+  hideInstallSheet(false);
+  showToast('FLEX installed — open it from your home screen');
+});
+document.getElementById('installGo').addEventListener('click', runInstall);
+document.getElementById('installLater').addEventListener('click', () => hideInstallSheet(true));
+// Browsers without beforeinstallprompt (Safari, Firefox, some others): after a
+// moment, show the manual steps instead — once, then snoozed like "Not now".
+// Browsers that support the one-tap install can take a few seconds to offer
+// it, so wait longer before falling back there.
+setTimeout(() => { if (!deferredInstall && !state.installOpen) showInstallSheet(false); },
+  'onbeforeinstallprompt' in window ? 12000 : 3000);
 
 /* ================= YouTube playback / queue ================= */
 const YT_ERRORS = {
@@ -795,6 +1438,7 @@ function setQueueFromPlaylist(playlistId, index){
   const pl = state.playlists.find(p => p.id === playlistId);
   if (!pl) return;
   state.queue = { tracks: pl.tracks.slice(), currentIndex: index, playlistId };
+  if (state.shuffle) buildShuffleOrder(state.queue, pl.tracks[index] && pl.tracks[index].id);
   state.errorStreak = 0;
   playTrackAtQueueIndex(index);
 }
@@ -810,17 +1454,38 @@ function playTrackAtQueueIndex(i){
   state.duration = 0;
   state.errorMsg = null;
   clearTimeout(state.errorSkipTimer);
-  state.player.loadVideoById(track.videoId);
+  if (q.order) { const p = q.order.indexOf(track.id); if (p >= 0) q.orderPos = p; }
+  // Long episodes pick up where they were left.
+  const saved = state.positions[track.videoId];
+  const startAt = saved ? saved.t : 0;
+  state.player.loadVideoById(startAt ? { videoId: track.videoId, startSeconds: startAt } : track.videoId);
+  if (startAt) showToast(`Resuming at ${fmtTime(startAt)} — ◀◀ to start over`);
   state.currentMeta = track;
+  addRecent(track);
   renderNowPlaying();
   updateMediaSession();
   startProgressLoop();
-  saveSession();
+  saveSession(startAt);
 }
 
 function nextTrack(auto){
   const q = state.queue;
   if (!q) return;
+  if (q.order && q.tracks.length > 1) {
+    let np = q.orderPos + 1;
+    if (np >= q.order.length) {
+      if (state.repeatMode === 'all') {
+        // New shuffle for the next lap, without playing the same track twice in a row.
+        const last = q.order[q.order.length - 1];
+        buildShuffleOrder(q, null);
+        if (q.order[0] === last) q.order.push(q.order.shift());
+        np = 0;
+      } else if (auto) { state.player.pauseVideo(); return; }
+      else return;
+    }
+    playTrackById(q.order[np]);
+    return;
+  }
   let ni = q.currentIndex + 1;
   if (ni >= q.tracks.length) {
     if (state.repeatMode === 'all') ni = 0;
@@ -835,6 +1500,12 @@ function prevTrack(){
   if (!q) return;
   const t = (state.player && state.player.getCurrentTime) ? state.player.getCurrentTime() : 0;
   if (t > 3) { state.player.seekTo(0, true); return; }
+  if (q.order && q.tracks.length > 1) {
+    let np = q.orderPos - 1;
+    if (np < 0) np = state.repeatMode === 'all' ? q.order.length - 1 : 0;
+    playTrackById(q.order[np]);
+    return;
+  }
   let pi = q.currentIndex - 1;
   if (pi < 0) pi = state.repeatMode === 'all' ? q.tracks.length - 1 : 0;
   playTrackAtQueueIndex(pi);
@@ -854,6 +1525,12 @@ function onPlayerStateChange(e){
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
   if (e.data === YT.PlayerState.PAUSED) saveSession();
   if (e.data === YT.PlayerState.ENDED) {
+    if (state.currentMeta) forgetPosition(state.currentMeta.videoId);
+    if (state.sleep && state.sleep.option === 'track') {
+      state.sleep = null;
+      updateSleepBadge();
+      return;
+    }
     if (state.repeatMode === 'one') { state.player.seekTo(0, true); state.player.playVideo(); }
     else nextTrack(true);
   }
@@ -863,6 +1540,10 @@ function onPlayerStateChange(e){
 // queue the player skips ahead after a moment, like an iPod skipping a bad file.
 function onPlayerError(e){
   state.errorMsg = YT_ERRORS[e.data] || "This video couldn't be played.";
+  if (state.currentMeta) {
+    state.recent = state.recent.filter(r => r.videoId !== state.currentMeta.videoId);
+    saveState();
+  }
   updateNpState();
   const q = state.queue;
   state.errorStreak = (state.errorStreak || 0) + 1;
@@ -912,7 +1593,8 @@ function npStateHtml(){
   if (state.errorMsg) return escapeHtml(state.errorMsg);
   const label = state.isPlaying ? 'Playing' : state.resumeAt ? 'Paused — press ▶❚❚ to resume' : 'Paused';
   const repeatIcon = state.repeatMode === 'off' ? '' : state.repeatMode === 'all' ? ' 🔁' : ' 🔂';
-  return `${label}${repeatIcon}`;
+  const shuffleIcon = state.shuffle ? ' 🔀' : '';
+  return `${label}${shuffleIcon}${repeatIcon}`;
 }
 function updateNpState(){
   const el = document.getElementById('npState');
@@ -931,7 +1613,7 @@ function renderNowPlaying(){
     <div class="art" style="background-image:url('${meta.thumb || ''}')"></div>
     <div class="np-title">${escapeHtml(meta.title || 'Untitled')}</div>
     <div class="np-sub">${escapeHtml(meta.author || '')}</div>
-    ${inQueue && q.tracks.length > 1 ? `<div class="np-queue">Track ${q.currentIndex + 1} of ${q.tracks.length}</div>` : ''}
+    ${inQueue && q.tracks.length > 1 ? `<div class="np-queue">Track ${(q.order ? q.orderPos : q.currentIndex) + 1} of ${q.tracks.length}${q.order ? ' · shuffled' : ''}</div>` : ''}
     <div class="progress-row">
       <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
       <div class="time-row"><span id="timeCurrent">${fmtTime(state.resumeAt)}</span><span id="timeTotal">0:00</span></div>
@@ -965,6 +1647,7 @@ function startProgressLoop(){
     if (fill) fill.style.width = dur ? `${Math.min(100, (cur / dur) * 100)}%` : '0%';
     if (tc) tc.textContent = fmtTime(cur);
     if (tt) tt.textContent = fmtTime(dur);
+    checkSleep();
     if (state.isPlaying && Date.now() - state.lastSessionSave > 5000) {
       state.lastSessionSave = Date.now();
       saveSession();
@@ -1059,7 +1742,7 @@ function vibrate(ms){ if (navigator.vibrate) { try { navigator.vibrate(ms); } ca
 
 function contextSelect(){
   const entry = current();
-  if (entry.pane === 'menu') { pushPane(MENU_ITEMS[entry.index].go); return; }
+  if (entry.pane === 'menu') { const m = MENU_ITEMS[entry.index]; pushPane(m.go, m.extra); return; }
   if (entry.pane === 'playlists') {
     if (entry.index === state.playlists.length) pushPane('newPlaylist');
     else pushPane('playlistDetail', { playlistId: state.playlists[entry.index].id });
@@ -1080,6 +1763,7 @@ function contextSelect(){
   if (entry.pane === 'newPlaylist') { createPlaylistFromInput(); return; }
   if (entry.pane === 'paste') { loadLinkFromInput(); return; }
   if (entry.pane === 'settings') { activateSettingsRow(entry.index); return; }
+  if (entry.pane === 'rows') { activateRow(entry); return; }
   if (entry.pane === 'nowplaying') { togglePlay(); return; }
 }
 
@@ -1157,6 +1841,11 @@ function endWheelPress(e){
       stopContinuousSeek();
     } else {
       const action = state.activePress.action;
+      if (state.installOpen && (action === 'menu' || action === 'select')) {
+        if (action === 'select') runInstall(); else hideInstallSheet(true);
+        state.activePress = null;
+        return;
+      }
       if (action === 'menu') popPane();
       else if (action === 'select') contextSelect();
       else if (action === 'play') togglePlay();
@@ -1185,6 +1874,19 @@ wheel.addEventListener('pointercancel', endWheelPress);
   // Reopen straight onto Now Playing; MENU still goes back to the menu.
   state.stack = [{ pane: 'menu', index: MENU_ITEMS.findIndex(m => m.go === 'nowplaying') }, { pane: 'nowplaying', index: 0 }];
   updateMediaSession();
+})();
+(function handleLaunchLinks(){
+  // Home-screen icon shortcuts (long-press the icon): ./?open=recent | quickplay
+  const open = new URLSearchParams(location.search).get('open');
+  if (open === 'recent' || open === 'quickplay') {
+    history.replaceState(null, '', location.pathname);
+    state.stack = [{ pane: 'menu', index: 0 }];
+    if (open === 'recent') state.stack.push({ pane: 'rows', kind: 'recent', index: 0 });
+    else state.stack.push({ pane: 'paste', index: 0 });
+    return;
+  }
+  const link = readSharedLink();
+  if (link !== undefined) openSharedLink(link);
 })();
 render();
 
