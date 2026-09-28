@@ -200,6 +200,16 @@
   .toast.show{ opacity:1; transform:none; }
   .toast.error{ border-color:var(--danger); }
 
+  /* Off screen (hold ▶❚❚) */
+  .off-screen{
+    position:absolute; inset:0; z-index:7; background:#000;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    color:#5d6670; font-size:11.5px; text-align:center; padding:0 20px;
+    opacity:0; pointer-events:none; transition:opacity .35s ease;
+  }
+  .off-screen.show{ opacity:1; pointer-events:auto; }
+  .off-screen .off-logo{ font-size:22px; font-weight:700; letter-spacing:4px; color:#2c333b; }
+
   /* Install popup */
   .install-sheet{
     position:absolute; inset:0; z-index:6;
@@ -330,6 +340,11 @@
         </div>
       </div>
       <div class="toast" id="toast"></div>
+      <div class="off-screen" id="offScreen">
+        <div class="off-logo">FLEX</div>
+        <div>Off — your spot is saved.</div>
+        <div>Press any button to turn on.</div>
+      </div>
       <div class="install-sheet" id="installSheet">
         <div class="install-card">
           <div class="install-head">
@@ -434,6 +449,7 @@ function loadSession(){
   return null;
 }
 function saveSession(positionOverride){
+  if (state.off) return;   // player was stopped on purpose; keep the spot saved at switch-off
   if (!state.queue || !state.currentMeta) return;
   // resumeAt is non-zero until the restored track actually starts playing;
   // before that the player reports 0 and would wipe the saved spot.
@@ -783,7 +799,8 @@ function settingsRows(){
     { label: 'Sleep Timer', value: sleepLabel(), run: cycleSleep },
     { label: 'Export Backup', value: '', run: exportBackup },
     { label: 'Import Backup', value: '', run: () => document.getElementById('importFile').click() },
-  ].concat(isInstalled() ? [] : [{ label: 'Install FLEX', value: '', run: () => showInstallSheet(true) }]);
+  ].concat(isInstalled() ? [] : [{ label: 'Install FLEX', value: '', run: () => showInstallSheet(true) }])
+   .concat([{ label: 'Turn Off', value: 'or hold ▶❚❚', run: powerOff }]);
 }
 function renderSettings(entry){
   const el = document.getElementById('settingsList');
@@ -1397,6 +1414,40 @@ document.getElementById('installLater').addEventListener('click', () => hideInst
 setTimeout(() => { if (!deferredInstall && !state.installOpen) showInstallSheet(false); },
   'onbeforeinstallprompt' in window ? 12000 : 3000);
 
+/* ================= Off switch (hold ▶❚❚) ================= */
+// Swiping an installed web app away on Android only hides its window — the
+// browser keeps the page (and the music) alive, and a page can't tell that
+// apart from the screen locking, where playback must continue. So, like a
+// real iPod: hold ▶❚❚ to turn FLEX off. Also on the media notification's
+// Stop button and Settings → Turn Off.
+const HOLD_TO_OFF_MS = 1200;
+function powerOff(){
+  if (state.off) return;
+  saveSession();                    // remember the exact spot first
+  state.off = true;
+  state.sleep = null;
+  updateSleepBadge();
+  hideInstallSheet(false);
+  try { state.player.pauseVideo(); state.player.stopVideo(); } catch (e) {}
+  clearInterval(state.progressTimer);
+  if ('mediaSession' in navigator) {
+    try {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
+    } catch (e) {}
+  }
+  document.getElementById('offScreen').classList.add('show');
+  vibrate([20, 60, 20]);
+  // Close the app window where the browser allows it (an installed app with no
+  // page history usually does); otherwise the off screen stays up.
+  setTimeout(() => { try { window.close(); } catch (e) {} }, 700);
+}
+function powerOn(){
+  // A fresh start reopens Now Playing with the saved track cued at its spot.
+  location.reload();
+}
+document.getElementById('offScreen').addEventListener('click', powerOn);
+
 /* ================= YouTube playback / queue ================= */
 const YT_ERRORS = {
   2: 'Invalid video link.',
@@ -1671,6 +1722,7 @@ function updateMediaSession(){
     nexttrack: () => nextTrack(false),
     seekbackward: (d) => seekBy(-((d && d.seekOffset) || 10)),
     seekforward: (d) => seekBy((d && d.seekOffset) || 10),
+    stop: () => powerOff(),
   };
   Object.entries(handlers).forEach(([action, fn]) => {
     try { navigator.mediaSession.setActionHandler(action, fn); } catch (e) {}
@@ -1784,11 +1836,18 @@ wheel.addEventListener('pointerdown', (e) => {
   if (hit) {
     const action = hit.dataset.action;
     state.activePress = { action, longFired: false, timer: null, startAngle: angleFromEvent(e) };
+    if (state.off) return;          // handled on release: any button turns FLEX on
     if (action === 'prev' || action === 'next') {
       state.activePress.timer = setTimeout(() => {
         state.activePress.longFired = true;
         startContinuousSeek(action === 'prev' ? -1 : 1);
       }, 450);
+    }
+    if (action === 'play') {
+      state.activePress.timer = setTimeout(() => {
+        state.activePress.longFired = true;
+        powerOff();
+      }, HOLD_TO_OFF_MS);
     }
     if (hit.id === 'centerBtn') hit.classList.add('pressed');
     thockSound(); vibrate(15);
@@ -1835,6 +1894,14 @@ wheel.addEventListener('pointermove', (e) => {
 
 function endWheelPress(e){
   document.getElementById('centerBtn').classList.remove('pressed');
+  if (state.off) {
+    // Releasing the very hold that turned FLEX off mustn't turn it back on.
+    const p = state.activePress;
+    state.activePress = null;
+    state.dragging = false;
+    if (!(p && p.longFired)) powerOn();
+    return;
+  }
   if (state.activePress) {
     if (state.activePress.timer) clearTimeout(state.activePress.timer);
     if (state.activePress.longFired) {
