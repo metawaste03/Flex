@@ -553,6 +553,7 @@ function render(){
       ? 'Paste a link to add it to this playlist.'
       : "Paste a YouTube video or podcast link. Uses YouTube's own player — nothing is downloaded.";
     updateImportListBtn();
+    autoPasteFromClipboard();
     setTimeout(() => document.getElementById('linkInput').focus({ preventScroll: true }), 50);
   }
   if (entry.pane === 'newPlaylist') {
@@ -797,6 +798,10 @@ function settingsRows(){
       run: cycleRepeatMode },
     { label: 'Shuffle', value: state.shuffle ? 'On' : 'Off', run: toggleShuffle },
     { label: 'Sleep Timer', value: sleepLabel(), run: cycleSleep },
+    { label: 'Background Play', value: browserKind() === 'brave' ? 'Brave ✓' : 'Needs Brave',
+      run: () => showToast(browserKind() === 'brave'
+        ? 'Background play works in Brave — keep Settings → Media → Background video playback on.'
+        : 'YouTube pauses when the screen is off in this browser. Open FLEX in Brave for background play.') },
     { label: 'Export Backup', value: '', run: exportBackup },
     { label: 'Import Backup', value: '', run: () => document.getElementById('importFile').click() },
   ].concat(isInstalled() ? [] : [{ label: 'Install FLEX', value: '', run: () => showInstallSheet(true) }])
@@ -847,6 +852,32 @@ document.getElementById('pasteFromClipboard').addEventListener('click', async ()
 });
 document.getElementById('loadLink').addEventListener('click', loadLinkFromInput);
 document.getElementById('linkInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadLinkFromInput(); });
+
+// Opening Quick Play / + Add Song picks up a YouTube link you just copied
+// (YouTube app: Share → Copy link), so it's one press of Load — the stand-in
+// for Share → FLEX in browsers like Brave that can't receive shares. Runs
+// inside the tap that opened the screen, which is what lets the browser allow
+// (or ask once to allow) reading the clipboard. Stays quiet if it can't.
+const LAST_CLIP_KEY = 'flex_last_clipboard_link';
+function autoPasteFromClipboard(){
+  const input = document.getElementById('linkInput');
+  if (input.value.trim() || !navigator.clipboard || !navigator.clipboard.readText) return;
+  let read;
+  try { read = navigator.clipboard.readText(); } catch (e) { return; }
+  read.then(text => {
+    const link = findUrl(text);
+    if (!link || !(extractVideoId(link) || extractListId(link))) return;
+    let last = null;
+    try { last = localStorage.getItem(LAST_CLIP_KEY); } catch (e) {}
+    if (link === last || input.value.trim() || current().pane !== 'paste') return;   // don't re-offer an old one
+    try { localStorage.setItem(LAST_CLIP_KEY, link); } catch (e) {}
+    input.value = link;
+    updateImportListBtn();
+    const ps = document.getElementById('pasteStatus');
+    ps.textContent = 'Pasted the link you copied — press Load.';
+    ps.classList.remove('error');
+  }).catch(() => {});
+}
 
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 function extractVideoId(url){
@@ -1359,14 +1390,37 @@ function isInstalled(){
 function installSnoozed(){
   try { return Date.now() - (+localStorage.getItem(INSTALL_DISMISS_KEY) || 0) < INSTALL_SNOOZE_MS; } catch (e) { return false; }
 }
-function manualInstallSteps(){
+// Background play: YouTube's embedded player pauses itself when the page is
+// hidden (screen off / app switched). Brave's "Background video playback"
+// setting stops that; Chrome, Firefox etc. have no equivalent, and FLEX can't
+// (and won't) tamper with YouTube's player — so FLEX points people to Brave.
+function browserKind(){
   const ua = navigator.userAgent;
-  if (/iPhone|iPad|iPod/.test(ua)) {
-    return '<ol><li>Tap the <b>Share</b> button in Safari</li><li>Choose <b>Add to Home Screen</b></li><li>Tap <b>Add</b></li></ol>';
+  if (/iPhone|iPad|iPod/.test(ua)) return 'ios';
+  if (navigator.brave) return 'brave';
+  if (/Firefox\//.test(ua)) return 'firefox';
+  if (/SamsungBrowser/.test(ua)) return 'samsung';
+  return 'chrome';
+}
+const BRAVE_BG_TIP = 'In Brave, keep <b>Settings → Media → Background video playback</b> on so music keeps playing with the screen off.';
+const NOT_BRAVE_BG_TIP = '<b>Heads-up:</b> in this browser YouTube pauses when the screen turns off. For background play, open this link in <b>Brave</b> instead.';
+function backgroundTip(){
+  const kind = browserKind();
+  if (kind === 'brave') return BRAVE_BG_TIP;
+  if (kind === 'ios') return 'On iPhone, YouTube pauses when the screen turns off.';
+  return NOT_BRAVE_BG_TIP;
+}
+function manualInstallSteps(){
+  const kind = browserKind();
+  const tip = `<div class="install-sub" style="margin-top:6px">${backgroundTip()}</div>`;
+  if (kind === 'ios') {
+    return '<ol><li>Tap the <b>Share</b> button in Safari</li><li>Choose <b>Add to Home Screen</b></li><li>Tap <b>Add</b></li></ol>' + tip;
+  }
+  if (kind === 'brave') {
+    return '<ol><li>Open Brave\'s menu <b>⋮</b></li><li>Tap <b>Add to Home screen</b></li><li>Tap <b>Add</b></li></ol>' + tip;
   }
   return '<ol><li>Open the browser menu <b>⋮</b></li><li>Tap <b>Add to Home screen</b> (or <b>Install app</b>)</li>'
-    + '<li>If asked, choose <b>Install</b> — not "Create shortcut"</li></ol>'
-    + '<div class="install-sub" style="margin-top:6px">For Share → FLEX from the YouTube app, install using Chrome.</div>';
+    + '<li>If asked, choose <b>Install</b> — not "Create shortcut"</li></ol>' + tip;
 }
 function showInstallSheet(force){
   if (isInstalled()) { if (force) showToast('FLEX is already installed'); return; }
@@ -1374,6 +1428,7 @@ function showInstallSheet(force){
   const canPrompt = !!deferredInstall;
   document.getElementById('installBody').innerHTML = canPrompt
     ? 'Opens full-screen from its own icon, and appears in your share menu so you can send YouTube links straight to it.'
+      + `<div class="install-sub" style="margin-top:6px">${backgroundTip()}</div>`
     : manualInstallSteps();
   document.getElementById('installGo').textContent = canPrompt ? 'Install' : 'Got it';
   document.getElementById('installSheet').classList.add('show');
