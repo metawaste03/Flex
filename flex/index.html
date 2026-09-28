@@ -1174,6 +1174,7 @@ function checkSleep(){
 }
 function fadeOutAndPause(){
   if (!state.player || !state.isPlaying) return;
+  state.autoAdvance = null;
   const start = state.volume != null ? state.volume : (state.player.getVolume ? state.player.getVolume() : 100);
   const steps = 20;
   let step = 0;
@@ -1480,6 +1481,7 @@ function powerOff(){
   if (state.off) return;
   saveSession();                    // remember the exact spot first
   state.off = true;
+  state.autoAdvance = null;
   state.sleep = null;
   updateSleepBadge();
   hideInstallSheet(false);
@@ -1577,6 +1579,7 @@ function playTrackAtQueueIndex(i){
 function nextTrack(auto){
   const q = state.queue;
   if (!q) return;
+  state.autoAdvance = auto ? { nudges: 0 } : null;
   if (q.order && q.tracks.length > 1) {
     let np = q.orderPos + 1;
     if (np >= q.order.length) {
@@ -1586,7 +1589,7 @@ function nextTrack(auto){
         buildShuffleOrder(q, null);
         if (q.order[0] === last) q.order.push(q.order.shift());
         np = 0;
-      } else if (auto) { state.player.pauseVideo(); return; }
+      } else if (auto) { state.autoAdvance = null; state.player.pauseVideo(); setMediaPaused(); return; }
       else return;
     }
     playTrackById(q.order[np]);
@@ -1595,7 +1598,7 @@ function nextTrack(auto){
   let ni = q.currentIndex + 1;
   if (ni >= q.tracks.length) {
     if (state.repeatMode === 'all') ni = 0;
-    else if (auto) { state.player.pauseVideo(); return; }
+    else if (auto) { state.autoAdvance = null; state.player.pauseVideo(); setMediaPaused(); return; }
     else ni = q.tracks.length - 1;
   }
   playTrackAtQueueIndex(ni);
@@ -1619,22 +1622,44 @@ function prevTrack(){
 
 function togglePlay(){
   if (!state.player || !state.ytReady) return;
+  state.autoAdvance = null;
   if (state.isPlaying) state.player.pauseVideo(); else state.player.playVideo();
 }
 
+// Moving to the next song on its own (song ended / unplayable skipped).
+// While that's happening FLEX keeps telling Android it's "playing", so the gap
+// between songs doesn't look like the music stopped (which lets Android park
+// the app with the screen off), and if the next song loads but doesn't start
+// by itself, FLEX presses play for it — a few times at most.
+const AUTO_ADVANCE_NUDGES = 3;
+function setMediaPaused(){
+  if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'paused'; } catch (e) {} }
+}
 function onPlayerStateChange(e){
   state.playerState = e.data;
   state.isPlaying = (e.data === YT.PlayerState.PLAYING);
-  if (state.isPlaying) { state.resumeAt = 0; state.errorMsg = null; state.errorStreak = 0; }
+  if (state.isPlaying) { state.resumeAt = 0; state.errorMsg = null; state.errorStreak = 0; state.autoAdvance = null; }
   sbRight.textContent = state.isPlaying ? '●' : '○';
   updateNpState();
-  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
+  const advancing = !!state.autoAdvance;
+  if ('mediaSession' in navigator) {
+    // A song ending is the start of the next one, not a stop; the places that
+    // really stop (end of playlist, sleep "end of track") set 'paused' themselves.
+    const ended = e.data === YT.PlayerState.ENDED;
+    navigator.mediaSession.playbackState = (state.isPlaying || advancing || ended) ? 'playing' : 'paused';
+  }
+  if (advancing && !state.off && (e.data === YT.PlayerState.CUED || e.data === YT.PlayerState.PAUSED)
+      && state.autoAdvance.nudges < AUTO_ADVANCE_NUDGES) {
+    state.autoAdvance.nudges++;
+    try { state.player.playVideo(); } catch (err) {}
+  }
   if (e.data === YT.PlayerState.PAUSED) saveSession();
   if (e.data === YT.PlayerState.ENDED) {
     if (state.currentMeta) forgetPosition(state.currentMeta.videoId);
     if (state.sleep && state.sleep.option === 'track') {
       state.sleep = null;
       updateSleepBadge();
+      setMediaPaused();
       return;
     }
     if (state.repeatMode === 'one') { state.player.seekTo(0, true); state.player.playVideo(); }
@@ -1777,7 +1802,6 @@ function updateMediaSession(){
     nexttrack: () => nextTrack(false),
     seekbackward: (d) => seekBy(-((d && d.seekOffset) || 10)),
     seekforward: (d) => seekBy((d && d.seekOffset) || 10),
-    stop: () => powerOff(),
   };
   Object.entries(handlers).forEach(([action, fn]) => {
     try { navigator.mediaSession.setActionHandler(action, fn); } catch (e) {}
