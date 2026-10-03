@@ -1,0 +1,7 @@
+drag from ▶▶ zone: track B vol 74 overlay 1
+drag from MENU zone: pane nowplaying vol 50
+tap ▶▶ -> track C
+menu selection index 3 pane menu
+NP after deleting playing track: TC | 0:00 | 0:00 | Playing
+next -> D
+errors []

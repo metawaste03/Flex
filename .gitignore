@@ -1,0 +1,8 @@
+# Test / tool output
+node_modules/
+tests/*.actual.txt
+tests/*.png
+tests/backup.json
+tests/evil.json
+tests/notflex.json
+tools/icon-preview.png
