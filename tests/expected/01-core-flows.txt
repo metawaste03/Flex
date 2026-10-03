@@ -1,0 +1,38 @@
+ids [
+  'dQw4w9WgXcQ',
+  'dQw4w9WgXcQ',
+  'dQw4w9WgXcQ',
+  'dQw4w9WgXcQ',
+  null,
+  null
+]
+detail rows: Song AAAAAAAAAA1
+Chan
+▶
+Song BBBBBBBBBB2
+Chan
+▶
+Song CCCCCCCCCC3
+Chan
+▶
++ Add Song
+NP: Song BBBBBBBBBB2 | Chan | Track 2 of 3 | 1:02:05 | 1:06:40 | Playing
+overlay shown: 1 vol 70
+armed: Delete?
+after delete: ☰ | Song AAAAAAAAAA1 | Chan | ✕ | ☰ | Song CCCCCCCCCC3 | Chan | ✕ | Rename Playlist | Delete Playlist
+queue [0,["AAAAAAAAAA1","CCCCCCCCCC3"]]
+next after delete -> CCCCCCCCCC3
+title Rename Playlist prefill Road
+title after rename: Road Trip
+saved pos 100
+after reload title: Now Playing | Song CCCCCCCCCC3 | Chan | Track 2 of 2 | 1:40 | 0:00 | Paused — press ▶❚❚ to resume
+calls [["cue","CCCCCCCCCC3",100]]
+2nd reload calls [["cue","CCCCCCCCCC3",100]]
+state after play: Playing
+menu after MENU: Menu
+err shown: The owner has disabled playback outside YouTube. 1
+skipped to: Good Playing
+after playlist delete: Playlists | Road Trip | 2 tracks | › | + New Playlist
+fmt [ '0:59', '1:02:05' ]
+sw http://localhost:8765/service-worker.js [ 'flex-shell-v5' ]
+errors: []
