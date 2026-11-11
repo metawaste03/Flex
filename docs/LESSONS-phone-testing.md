@@ -50,3 +50,8 @@ YouTube's player (spec §10).
   loads a new video; moving on did, and browsers won't start new media in a hidden page without a
   tap. PR #5 hands the whole queue to YouTube as a playlist so YouTube moves on itself.
   If this ever regresses, check first whether FLEX is loading videos itself mid-playlist.
+  **Confirmed on the phone** (installed app, screen off).
+- Then: in the installed app the **lock-screen player** showed only for the first song (it does
+  show after opening and leaving the app), and vanished when YouTube moved on, though the music
+  continued. In a normal Brave tab it showed. PR #6 adds FLEX's own silent keep-alive sound so the
+  page never goes quiet between songs.

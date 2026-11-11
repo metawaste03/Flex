@@ -18,6 +18,7 @@ const suites = [
   ['07-auto-advance-logic', 'check'],
   ['08-background-auto-advance', 'check'],
   ['09-youtube-playlist-queue', 'check'],
+  ['10-keep-notification', 'check'],
 ];
 let failed = 0;
 for (const [name, kind] of suites) {

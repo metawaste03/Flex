@@ -1492,6 +1492,7 @@ function powerOff(){
   state.off = true;
   state.autoAdvance = null;
   state.stopWhenNextStarts = false;
+  keepAlive(false);
   state.sleep = null;
   updateSleepBadge();
   hideInstallSheet(false);
@@ -1576,6 +1577,7 @@ function playTrackAtQueueIndex(i){
   const saved = state.positions[track.videoId];
   const startAt = saved ? saved.t : 0;
   state.currentMeta = track;
+  keepAlive(true);
   loadIntoPlayer(startAt, false);
   if (startAt) showToast(`Resuming at ${fmtTime(startAt)} — ◀◀ to start over`);
   addRecent(track);
@@ -1633,7 +1635,8 @@ function togglePlay(){
   if (!state.player || !state.ytReady) return;
   state.autoAdvance = null;
   state.stopWhenNextStarts = false;
-  if (state.isPlaying) state.player.pauseVideo(); else state.player.playVideo();
+  if (state.isPlaying) state.player.pauseVideo();
+  else { keepAlive(true); state.player.playVideo(); }   // started inside the tap, which browsers require
 }
 
 // Moving to the next song on its own (song ended / unplayable skipped).
@@ -1643,7 +1646,47 @@ function togglePlay(){
 // by itself, FLEX presses play for it — a few times at most.
 const AUTO_ADVANCE_NUDGES = 3;
 function setMediaPaused(){
+  keepAlive(false);
   if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'paused'; } catch (e) {} }
+}
+
+/* ---- Keeping the lock-screen player up between songs ----
+ * The phone ties the media notification to whatever is making sound in the
+ * page. That used to be only YouTube's hidden player, which briefly stops
+ * every time YouTube moves on to the next song — so the notification vanished
+ * after the first song, even though the music carried on. FLEX now also plays
+ * a few seconds of pure silence on a loop (its own sound, made here; YouTube's
+ * player is untouched) while music is on. It never stops between songs, so the
+ * notification stays — and because FLEX's own page is now part of the sound,
+ * the notification uses FLEX's title and ◀◀ / ▶▶ buttons. It stops wherever
+ * FLEX really stops (pause, end of playlist, sleep timer, off). */
+function silentWavUrl(seconds){
+  const rate = 8000, n = rate * seconds;               // 8 kHz, 8-bit mono: ~80 KB
+  const buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVE');
+  str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+  str(36, 'data'); v.setUint32(40, n, true);
+  new Uint8Array(buf, 44).fill(128);                   // 128 = silence for 8-bit audio
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+function keepAlive(on){
+  state.keepAliveOn = !!on;
+  if (!state.silentAudio) {
+    if (!on) return;
+    try {
+      const a = new Audio(silentWavUrl(10));   // longer than 5 s: phones ignore very short sounds
+      a.loop = true;
+      a.preload = 'auto';
+      state.silentAudio = a;
+    } catch (e) { return; }
+  }
+  const a = state.silentAudio;
+  try {
+    if (on) { if (a.paused) { const p = a.play(); if (p && p.catch) p.catch(() => {}); } }
+    else if (!a.paused) a.pause();
+  } catch (e) {}
 }
 function onPlayerStateChange(e){
   state.playerState = e.data;
@@ -1672,6 +1715,10 @@ function onPlayerStateChange(e){
     const ended = e.data === YT.PlayerState.ENDED;
     navigator.mediaSession.playbackState = (state.isPlaying || advancing || ended) ? 'playing' : 'paused';
   }
+  // The silent keep-alive follows the music, but carries on through the gap
+  // between songs (advancing) so the notification doesn't drop.
+  if (state.isPlaying) keepAlive(true);
+  else if (e.data === YT.PlayerState.PAUSED && !advancing) keepAlive(false);
   if (advancing && !state.off && (e.data === YT.PlayerState.CUED || e.data === YT.PlayerState.PAUSED)
       && state.autoAdvance.nudges < AUTO_ADVANCE_NUDGES) {
     state.autoAdvance.nudges++;
@@ -1840,7 +1887,7 @@ function onPlayerError(e){
     state.errorSkipTimer = setTimeout(() => {
       if (!state.currentMeta || state.currentMeta.id === failedId) nextTrack(true);
     }, 2500);
-  }
+  } else keepAlive(false);   // nothing more will play
 }
 
 function adjustVolume(direction){
@@ -1955,7 +2002,7 @@ function updateMediaSession(){
     artwork: meta.thumb ? [{ src: meta.thumb, sizes: '320x180', type: 'image/jpeg' }] : []
   });
   const handlers = {
-    play: () => state.player && state.player.playVideo(),
+    play: () => { if (!state.player) return; keepAlive(true); state.player.playVideo(); },
     pause: () => state.player && state.player.pauseVideo(),
     previoustrack: () => prevTrack(),
     nexttrack: () => nextTrack(false),
