@@ -27,7 +27,7 @@ publishes), plus its tests, tools, screenshots and project notes. Only `flex/` i
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | How the app is built: screens, storage, playback, every feature's moving parts. |
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | What changed in each milestone / pull request, in order. |
 | [`docs/LESSONS-phone-testing.md`](docs/LESSONS-phone-testing.md) | What we learned testing on the real phone (Brave vs Chrome vs Firefox, installing, sharing, background play). |
-| [`tests/`](tests/) | 9 browser test suites (148 checks + 2 snapshot flows) that drive the real app with a stand-in for YouTube. `node run-all.mjs`. |
+| [`tests/`](tests/) | 10 browser test suites (162 checks + 2 snapshot flows) that drive the real app with a stand-in for YouTube. `node run-all.mjs`. |
 | [`tools/`](tools/) | The icon artwork (`icon.svg`) and scripts that regenerate the icons and the install-dialog screenshots. |
 | [`screenshots/`](screenshots/) | Pictures of the screens we built (share screen, Recently Played, settings, install popups, off screen…). |
 | [`archive/original-upload-Flex.zip`](archive/) | The original zip you uploaded at the start (MVP + Milestone 2 prototype). |

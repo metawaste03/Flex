@@ -28,6 +28,7 @@ Set `CHROMIUM_PATH=/path/to/chrome` to use a specific browser binary.
 | `07-auto-advance-logic.mjs` | 3 checks | Song end → next song, with shuffle and Repeat All. |
 | `08-background-auto-advance.mjs` | 11 checks | The PR #3 fix: next song blocked from starting → FLEX starts it; session never "paused" mid-playlist; caps and user pauses respected. |
 | `09-youtube-playlist-queue.mjs` | 30 checks | PR #5: the queue is handed to YouTube as a playlist and YouTube moves on by itself (FLEX loads nothing new), with or without an "ended" event; ▶▶/◀◀, Repeat All/One, edits, shuffle, sleep end-of-track, errors, resume spots, 200-song batches, reopen. |
+| `10-keep-notification.mjs` | 14 checks | PR #6: FLEX's silent keep-alive sound is on while playing, never switches off during a song change, and is off on pause, end of playlist, sleep timer, unplayable song, off. |
 
 If a snapshot suite fails because behaviour changed **on purpose**, look at
 `<name>.actual.txt`, then copy it over `expected/<name>.txt`.

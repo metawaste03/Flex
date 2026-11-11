@@ -47,4 +47,14 @@ Now FLEX hands the queue to YouTube's player as an official playlist (`loadPlayl
 moves on by itself and FLEX follows along (title, lock screen, Recently Played, resume spots).
 Repeat One, one-song queues and sleep "end of track" still load a single video. New test suite
 `09-youtube-playlist-queue` (30 checks); the test runner now works on Windows.
-Service worker `flex-shell-v6`. **Needs a phone test.**
+Service worker `flex-shell-v6`. **Confirmed on the phone** (installed, screen off: next songs play by themselves).
+
+## Fix — PR #6: lock-screen player disappeared after the first song
+Found while phone-testing PR #5 in the installed app: the media notification showed for the
+first song, then vanished when YouTube moved on, though the music kept playing. The notification
+follows whatever is making sound in the page — only YouTube's player, which briefly stops between
+songs. FLEX now plays its own looping silent sound (generated in the page, YouTube untouched)
+while music is on, kept on through song changes and off wherever FLEX really stops. Its own page
+being part of the sound should also make the notification use FLEX's title and buttons.
+New test suite `10-keep-notification` (14 checks). Service worker `flex-shell-v7`.
+**Needs a phone test.**

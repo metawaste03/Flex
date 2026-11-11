@@ -234,7 +234,7 @@ ok('shortcut ?open=recent', (await txt('#titlebar')) === 'Recently Played' && (a
 await page.goto(U + '?open=quickplay'); await wait(300);
 ok('shortcut ?open=quickplay', (await txt('#titlebar')) === 'Paste Link');
 await wait(500);
-ok('service worker current version', JSON.stringify(await ev(() => caches.keys())).includes('flex-shell-v6'), JSON.stringify(await ev(() => caches.keys())));
+ok('service worker current version', JSON.stringify(await ev(() => caches.keys())).includes('flex-shell-v7'), JSON.stringify(await ev(() => caches.keys())));
 const man = await ev(() => fetch('manifest.json').then(r => r.json()));
 ok('manifest share_target', man.share_target && man.share_target.action === './' && man.share_target.method === 'GET');
 console.log('page errors:', errs);

@@ -93,6 +93,12 @@ and rebuilds every track from its `videoId` (`cleanTrack`).
   `cueVideoById`) at the saved spot (no autoplay; the user presses play).
 - **Media Session:** metadata + handlers play, pause, previoustrack, nexttrack, seekbackward,
   seekforward.
+- **Silent keep-alive (PR #6):** `keepAlive(on)` plays/pauses `state.silentAudio`, FLEX's own
+  looping 10 s silent WAV (`silentWavUrl`, a blob — no file). On: PLAYING, user play (inside the
+  tap), `playTrackAtQueueIndex`. Stays on while `autoAdvance` is set (gap between songs). Off: user
+  pause (PAUSED, not advancing), `setMediaPaused()` (true stops), unplayable last song, `powerOff`.
+  Without it the notification disappeared after the first song (YouTube's player is the only
+  sound and it briefly stops between songs). Phone-test any change here.
 - **Progress loop** (500 ms): progress bar/time, `checkSleep()`, periodic `saveSession()`.
 
 ## Other feature notes
