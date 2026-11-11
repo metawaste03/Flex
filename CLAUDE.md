@@ -18,7 +18,7 @@ other branch gets a preview at `https://<branch>-flex.metawaste03.workers.dev`.
    inside YouTube's iframe (it's cross-origin anyway). If a request needs that, say no and
    explain (spec §7 and §10). This is the one line the project never crosses.
 2. **Bump `CACHE_NAME` in `flex/service-worker.js`** (`flex-shell-vN` → `vN+1`) in any change
-   that ships to `main` and touches the app's files. Current: `flex-shell-v5`.
+   that ships to `main` and touches the app's files. Current: `flex-shell-v6`.
 3. **Keep it dependency-free.** No frameworks, bundlers or npm packages in `flex/`.
    Playwright is only for the tests.
 4. **Never push straight to `main`.** Work on a branch → open a PR → the owner tests the
@@ -51,6 +51,8 @@ on the phone, and say plainly when something can't be tested here.
   notification "stop" action plus flipping `playbackState` to `paused` at song end made
   playlists stop after one song with the screen off (fixed in PR #3). Keep it `playing` while
   FLEX advances by itself.
+- **Mid-playlist, YouTube moves on by itself** (the queue is a YouTube playlist, PR #5). Don't go
+  back to FLEX loading each next video — that's what stopped playlists in the background.
 - Each address (live vs preview, Brave vs Chrome) has **separate storage**. Remind the owner to
   use Export / Import Backup when switching.
 - Listen carefully to the owner's bug reports and confirm what they mean before arguing it's a

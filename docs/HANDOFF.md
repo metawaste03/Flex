@@ -64,18 +64,33 @@ and rebuilds every track from its `videoId` (`cleanTrack`).
 - One hidden `YT.Player` in `#ytMount` (1×1px). `state.player`, `state.ytReady`.
 - **Queue:** `state.queue = { tracks, currentIndex, playlistId, order?, orderPos? }`.
   `order`/`orderPos` exist only when shuffle is on (track **ids**, so edits don't break it).
-- `playTrackAtQueueIndex(i)` → `loadVideoById` (with `startSeconds` if a resume spot exists) →
-  `addRecent`, `renderNowPlaying`, `updateMediaSession`, `startProgressLoop`, `saveSession`.
+- **The queue is handed to YouTube as a playlist (PR #5).** `loadIntoPlayer()` gives the player
+  `queuePlan()` — the current song, the ones after it, and (Repeat All) the ones before it, with
+  `setLoop` — via the IFrame API's `loadPlaylist` / `cuePlaylist`. YouTube then moves on to the
+  next song **by itself**, which is what keeps playlists going with the screen off / app in the
+  background (browsers won't start a new video that no tap started; Repeat One always worked
+  because it never loads anything new). `state.ytList` = what's loaded (`{single, tracks}` or
+  `{tracks, loop, index}`). `followYouTube()` (every state change except ENDED) reads
+  `getPlaylistIndex()` and updates `currentMeta`, queue position, Recently Played, lock screen,
+  session. ▶▶/◀◀ use `playVideoAt` when the loaded list already fits; otherwise it's reloaded.
+  `refreshYouTubeList()` reloads (keeping the spot) after playlist edits, Shuffle, Repeat, or sleep
+  "end of track". **Single-video mode** (`loadVideoById`) is used for Repeat One, a one-song queue
+  and sleep "end of track". Lists are capped at 200 (`YT_LIST_MAX`); at the end of a batch FLEX
+  loads the next one itself. Shuffle + Repeat All loops the same shuffled order each lap.
+- `playTrackAtQueueIndex(i)` → `loadIntoPlayer` (with the resume spot; via `pendingSeek` when it
+  only jumps within the list) → `addRecent`, `renderNowPlaying`, `updateMediaSession`,
+  `startProgressLoop`, `saveSession`.
 - **Song end:** `onPlayerStateChange(ENDED)` → forget resume spot → sleep "end of track"? stop :
-  repeat one? replay : `nextTrack(true)`.
+  repeat one? replay : YouTube moves on by itself? just wait (`autoAdvance` set) : `nextTrack(true)`
+  (end of list or end of a 200 batch).
 - **Auto-advance safety (PR #3):** `nextTrack(true)` sets `state.autoAdvance`; while it's set, the
   media session stays `playing`, and if the next video comes back CUED/PAUSED, FLEX calls
   `playVideo()` (max 3). Cleared on PLAYING, user play/pause, sleep fade, power-off, end of list.
   **`paused` is reported only where FLEX truly stops.** Don't add a media-session `stop` handler.
-- **Errors:** `onPlayerError` shows a plain message; in a queue, skips after 2.5 s (stops once
-  every track has failed).
-- **Restore on launch:** `restoreSession()` → `cueVideoById` at the saved spot (no autoplay; the
-  user presses play).
+- **Errors:** `onPlayerError` shows a plain message; in a queue, skips after 2.5 s unless YouTube
+  already moved past it (stops once every track has failed).
+- **Restore on launch:** `restoreSession()` → `loadIntoPlayer(spot, cueOnly)` → `cuePlaylist` (or
+  `cueVideoById`) at the saved spot (no autoplay; the user presses play).
 - **Media Session:** metadata + handlers play, pause, previoustrack, nexttrack, seekbackward,
   seekforward.
 - **Progress loop** (500 ms): progress bar/time, `checkSleep()`, periodic `saveSession()`.
@@ -101,4 +116,3 @@ and rebuilds every track from its `videoId` (`cleanTrack`).
 - Real lock-screen artwork sizes / higher-res thumbnails.
 - Reorder playlists themselves (only songs are reorderable).
 - A "Queue" screen showing what's up next.
-- Optional: test a `loadPlaylist`-based queue if background advancing ever regresses again.

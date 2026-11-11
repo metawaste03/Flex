@@ -43,3 +43,10 @@ YouTube's player (spec §10).
   not "I want it to stop". Read reports twice and confirm before answering.
 - "It stops at the end of a song" turned out to be a FLEX regression, not a browser limit. When the
   owner says it worked before, compare the code before/after first.
+
+## Background playlists, again (Nov 2026 → PR #5)
+- Reported: leave the app (or lock the screen), and one song on **Repeat One** keeps looping, but a
+  playlist stops when the **next song** is due — in Brave and Chrome. The difference: repeat never
+  loads a new video; moving on did, and browsers won't start new media in a hidden page without a
+  tap. PR #5 hands the whole queue to YouTube as a playlist so YouTube moves on itself.
+  If this ever regresses, check first whether FLEX is loading videos itself mid-playlist.

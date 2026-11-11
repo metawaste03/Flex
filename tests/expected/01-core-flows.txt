@@ -34,5 +34,5 @@ err shown: The owner has disabled playback outside YouTube. 1
 skipped to: Good Playing
 after playlist delete: Playlists | Road Trip | 2 tracks | › | + New Playlist
 fmt [ '0:59', '1:02:05' ]
-sw http://localhost:8765/service-worker.js [ 'flex-shell-v5' ]
+sw http://localhost:8765/service-worker.js [ 'flex-shell-v6' ]
 errors: []

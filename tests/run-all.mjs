@@ -5,8 +5,9 @@
 //     expected/<name>.txt exactly (refresh it deliberately if behaviour changes).
 import { execFileSync } from 'child_process';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 
-const here = new URL('.', import.meta.url).pathname;
+const here = fileURLToPath(new URL('.', import.meta.url));   // works on Windows too
 const suites = [
   ['03-milestone4-features', 'check'],   // run first: also writes fake_yt.js
   ['01-core-flows', 'snapshot'],
@@ -16,6 +17,7 @@ const suites = [
   ['06-autopaste-brave', 'check'],
   ['07-auto-advance-logic', 'check'],
   ['08-background-auto-advance', 'check'],
+  ['09-youtube-playlist-queue', 'check'],
 ];
 let failed = 0;
 for (const [name, kind] of suites) {
@@ -31,7 +33,8 @@ for (const [name, kind] of suites) {
     if (bad) console.log(out.split('\n').filter(l => l.startsWith('FAIL') || /Error/.test(l)).map(l => '    ' + l).join('\n'));
   } else {
     const expected = fs.readFileSync(new URL(`expected/${name}.txt`, import.meta.url), 'utf8');
-    const same = out === expected;
+    const lf = (s) => s.replace(/\r\n/g, '\n');   // Windows checkouts add \r
+    const same = lf(out) === lf(expected);
     if (!same) failed++;
     console.log(`${same ? '✓' : '✗'} ${name}: ${same ? 'matches snapshot' : 'output changed — compare with expected/' + name + '.txt'}`);
     if (!same) fs.writeFileSync(new URL(`${name}.actual.txt`, import.meta.url), out);

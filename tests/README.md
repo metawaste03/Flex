@@ -2,8 +2,8 @@
 
 Browser tests that drive the real `flex/index.html` in Chromium (via Playwright). YouTube is
 replaced by **`fake_yt.js`**, a stand-in for the IFrame Player API that records every call FLEX makes
-(load, cue, play, pause, stop, volume) and lets a test end a song, jump in time, or refuse to start
-the next video. So: **no internet needed**, and FLEX's own logic is fully checked — but real YouTube
+(load, cue, play, pause, stop, volume, YouTube playlists) and lets a test end a song (in a playlist the
+stand-in moves on by itself, like YouTube), jump in time, or refuse to start the next video. So: **no internet needed**, and FLEX's own logic is fully checked — but real YouTube
 and real phone behaviour (background play, installing, share sheet) still need a phone test.
 
 ## Run
@@ -27,6 +27,7 @@ Set `CHROMIUM_PATH=/path/to/chrome` to use a specific browser binary.
 | `06-autopaste-brave.mjs` | 15 checks | Auto-paste rules, Brave/Chrome/Firefox wording, Background Play row. |
 | `07-auto-advance-logic.mjs` | 3 checks | Song end → next song, with shuffle and Repeat All. |
 | `08-background-auto-advance.mjs` | 11 checks | The PR #3 fix: next song blocked from starting → FLEX starts it; session never "paused" mid-playlist; caps and user pauses respected. |
+| `09-youtube-playlist-queue.mjs` | 30 checks | PR #5: the queue is handed to YouTube as a playlist and YouTube moves on by itself (FLEX loads nothing new), with or without an "ended" event; ▶▶/◀◀, Repeat All/One, edits, shuffle, sleep end-of-track, errors, resume spots, 200-song batches, reopen. |
 
 If a snapshot suite fails because behaviour changed **on purpose**, look at
 `<name>.actual.txt`, then copy it over `expected/<name>.txt`.
