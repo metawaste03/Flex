@@ -37,3 +37,14 @@ Regression from Milestone 4 found on the phone. Removed the notification "stop" 
 media session "playing" through the gap between songs, and FLEX now presses play if the next song
 loads but doesn't start (max 3 tries, never against a user pause). Confirmed on the phone.
 Service worker `flex-shell-v5`.
+
+## Fix — PR #5: playlists still stopped in the background when moving to another song
+Reported 2026-11: in Brave (and Chrome), with the app left or the screen locked, one song on
+Repeat One kept looping but a playlist stopped when the next song was due, until FLEX was opened.
+Cause: each next song was a new video loaded by FLEX, and browsers won't start new media in a
+hidden page that no tap started (PR #3's "press play" retry couldn't always get past that).
+Now FLEX hands the queue to YouTube's player as an official playlist (`loadPlaylist`), so YouTube
+moves on by itself and FLEX follows along (title, lock screen, Recently Played, resume spots).
+Repeat One, one-song queues and sleep "end of track" still load a single video. New test suite
+`09-youtube-playlist-queue` (30 checks); the test runner now works on Windows.
+Service worker `flex-shell-v6`. **Needs a phone test.**

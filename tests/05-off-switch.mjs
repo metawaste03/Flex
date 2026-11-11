@@ -55,7 +55,7 @@ ok('pagehide while off keeps spot', (await page.evaluate(() => JSON.parse(localS
 await Promise.all([page.waitForNavigation(), page.locator('.hit-menu').click()]);
 await page.waitForTimeout(400);
 ok('any button turns on: back on Now Playing, cued at spot', (await page.evaluate(() => current().pane)) === 'nowplaying'
-   && (await page.evaluate(() => JSON.stringify(__calls.find(c => c[0]==='cue')))) === JSON.stringify(['cue','LONGEPISOD1',754]), await page.evaluate(() => JSON.stringify(__calls)));
+   && (await page.evaluate(() => JSON.stringify(__calls.find(c => c[0]==='cueList')))) === JSON.stringify(['cueList',['LONGEPISOD1','BBBBBBBBBB2'],0,754]), await page.evaluate(() => JSON.stringify(__calls)));
 ok('media notification has no Stop (removed: it could end background playlists)', await page.evaluate(() => !('stop' in window.__handlers)));
 await page.evaluate(() => { state.stack = [{pane:'menu',index:0},{pane:'settings',index:0}]; render(); });
 ok('Settings has Turn Off row', (await page.locator('#settingsList').innerText()).includes('Turn Off'));

@@ -19,12 +19,13 @@ for (const [shuffle, repeat] of [[false,'off'],[true,'off'],[false,'all']]) {
     setQueueFromPlaylist('p', 0); await new Promise(r => setTimeout(r, 50));
     const seq = [state.currentMeta.title];
     for (let i = 0; i < 3; i++) { __end(); await new Promise(r => setTimeout(r, 50)); seq.push(state.currentMeta.title + (state.isPlaying ? '▶' : '⏸')); }
-    return { seq, loads: __calls.filter(c => c[0]==='load').length };
+    // FLEX loads the playlist once; YouTube moves on by itself after that.
+    return { seq, loads: __calls.filter(c => ['load','loadList','playAt'].includes(c[0])).length };
   }, [shuffle, repeat]);
 }
 const r1 = results['false/off'], r2 = results['true/off'], r3 = results['false/all'];
-ok('in order: each ended song starts the next, stops after the last', r1.seq.join(' ') === 'A B▶ C▶ C⏸' && r1.loads === 3, r1.seq.join(' → '));
+ok('in order: each ended song starts the next, stops after the last', r1.seq.join(' ') === 'A B▶ C▶ C⏸' && r1.loads === 1, r1.seq.join(' → '));
 const shuffled = r2.seq.slice(0, 3).map(x => x.replace(/[▶⏸]/g, ''));
-ok('shuffle: plays all 3 once, each starts, stops after the last', new Set(shuffled).size === 3 && r2.seq[1].endsWith('▶') && r2.seq[2].endsWith('▶') && r2.seq[3].endsWith('⏸') && r2.loads === 3, r2.seq.join(' → '));
-ok('repeat all: wraps from the last song back to the first', r3.seq.join(' ') === 'A B▶ C▶ A▶' && r3.loads === 4, r3.seq.join(' → '));
+ok('shuffle: plays all 3 once, each starts, stops after the last', new Set(shuffled).size === 3 && r2.seq[1].endsWith('▶') && r2.seq[2].endsWith('▶') && r2.seq[3].endsWith('⏸') && r2.loads === 1, r2.seq.join(' → '));
+ok('repeat all: wraps from the last song back to the first', r3.seq.join(' ') === 'A B▶ C▶ A▶' && r3.loads === 1, r3.seq.join(' → '));
 await browser.close();

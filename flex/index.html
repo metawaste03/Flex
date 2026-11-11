@@ -412,6 +412,9 @@ const state = {
   player: null,
   ytReady: false,
   queue: null,        // { tracks:[...], currentIndex, playlistId }
+  ytList: null,       // what YouTube's player has loaded (see "Handing the queue to YouTube")
+  pendingSeek: null,  // { id, t }: jump to a saved spot once that song starts
+  stopWhenNextStarts: false,   // sleep "end of track" while YouTube moves on by itself
   currentMeta: null,
   isPlaying: false,
   progressTimer: null,
@@ -761,6 +764,7 @@ function syncQueueWithPlaylist(pl){
     q.orderPos = before.length - 1;
   }
   saveSession();
+  refreshYouTubeList();
   if (current().pane === 'nowplaying') renderNowPlaying();
 }
 
@@ -831,6 +835,7 @@ function setSkin(skin){
 function cycleRepeatMode(){
   state.repeatMode = state.repeatMode === 'off' ? 'all' : state.repeatMode === 'all' ? 'one' : 'off';
   saveState();
+  refreshYouTubeList();
   if (current().pane === 'nowplaying') renderNowPlaying();
 }
 document.documentElement.setAttribute('data-skin', state.skin);
@@ -1128,6 +1133,7 @@ function toggleShuffle(){
       delete q.order; delete q.orderPos;
     }
     saveSession();
+    refreshYouTubeList();
   }
   showToast(state.shuffle ? 'Shuffle on' : 'Shuffle off');
 }
@@ -1143,6 +1149,9 @@ function cycleSleep(){
   const next = SLEEP_OPTIONS[(cur + 1) % SLEEP_OPTIONS.length];
   state.sleep = next === 0 ? null : { option: next, at: next === 'track' ? null : Date.now() + next * 60000 };
   updateSleepBadge();
+  // "End of track" gives YouTube only this song, so it can't move on; other
+  // options give it the playlist again.
+  if (next === 'track' || cur === SLEEP_OPTIONS.indexOf('track')) refreshYouTubeList();
   showToast(!state.sleep ? 'Sleep timer off'
     : next === 'track' ? 'Will stop at the end of this track' : `Will stop in ${next} minutes`);
 }
@@ -1482,6 +1491,7 @@ function powerOff(){
   saveSession();                    // remember the exact spot first
   state.off = true;
   state.autoAdvance = null;
+  state.stopWhenNextStarts = false;
   state.sleep = null;
   updateSleepBadge();
   hideInstallSheet(false);
@@ -1525,9 +1535,8 @@ window.onYouTubeIframeAPIReady = function () {
         // Browsers only allow playback to start from a tap, so the user
         // presses play to carry on where they left off.
         if (state.pendingCue) {
-          const t = state.pendingCue;
           state.pendingCue = null;
-          state.player.cueVideoById({ videoId: t.videoId, startSeconds: Math.floor(state.resumeAt) });
+          loadIntoPlayer(Math.floor(state.resumeAt), true);
           startProgressLoop();
         }
       },
@@ -1566,9 +1575,9 @@ function playTrackAtQueueIndex(i){
   // Long episodes pick up where they were left.
   const saved = state.positions[track.videoId];
   const startAt = saved ? saved.t : 0;
-  state.player.loadVideoById(startAt ? { videoId: track.videoId, startSeconds: startAt } : track.videoId);
-  if (startAt) showToast(`Resuming at ${fmtTime(startAt)} — ◀◀ to start over`);
   state.currentMeta = track;
+  loadIntoPlayer(startAt, false);
+  if (startAt) showToast(`Resuming at ${fmtTime(startAt)} — ◀◀ to start over`);
   addRecent(track);
   renderNowPlaying();
   updateMediaSession();
@@ -1623,6 +1632,7 @@ function prevTrack(){
 function togglePlay(){
   if (!state.player || !state.ytReady) return;
   state.autoAdvance = null;
+  state.stopWhenNextStarts = false;
   if (state.isPlaying) state.player.pauseVideo(); else state.player.playVideo();
 }
 
@@ -1637,8 +1647,22 @@ function setMediaPaused(){
 }
 function onPlayerStateChange(e){
   state.playerState = e.data;
+  followYouTube(e);
   state.isPlaying = (e.data === YT.PlayerState.PLAYING);
-  if (state.isPlaying) { state.resumeAt = 0; state.errorMsg = null; state.errorStreak = 0; state.autoAdvance = null; }
+  if (state.isPlaying) {
+    state.resumeAt = 0; state.errorMsg = null; state.errorStreak = 0; state.autoAdvance = null;
+    if (state.stopWhenNextStarts) {
+      // Sleep "end of track": YouTube already moved on to the next song — stop there.
+      state.stopWhenNextStarts = false;
+      try { state.player.pauseVideo(); } catch (err) {}
+      return;
+    }
+    if (state.pendingSeek) {
+      const ps = state.pendingSeek;
+      state.pendingSeek = null;
+      if (state.currentMeta && state.currentMeta.id === ps.id) { try { state.player.seekTo(ps.t, true); } catch (err) {} }
+    }
+  }
   sbRight.textContent = state.isPlaying ? '●' : '○';
   updateNpState();
   const advancing = !!state.autoAdvance;
@@ -1656,15 +1680,146 @@ function onPlayerStateChange(e){
   if (e.data === YT.PlayerState.PAUSED) saveSession();
   if (e.data === YT.PlayerState.ENDED) {
     if (state.currentMeta) forgetPosition(state.currentMeta.videoId);
+    const l = state.ytList;
+    const youTubeMovesOn = !!(l && !l.single && (l.loop || l.index < l.tracks.length - 1));
     if (state.sleep && state.sleep.option === 'track') {
       state.sleep = null;
       updateSleepBadge();
+      if (youTubeMovesOn) state.stopWhenNextStarts = true;
       setMediaPaused();
       return;
     }
     if (state.repeatMode === 'one') { state.player.seekTo(0, true); state.player.playVideo(); }
+    else if (youTubeMovesOn) state.autoAdvance = { nudges: 0 };   // YouTube starts the next song itself
     else nextTrack(true);
   }
+}
+
+/* ---- Handing the queue to YouTube ----
+ * Moving to the next song used to mean FLEX loading a new video itself. With
+ * the screen off or the app in the background, browsers often won't start a
+ * new video that no tap started — so playlists stopped after one song, while
+ * one song on Repeat One kept going (that never loads anything new).
+ * Now FLEX gives YouTube's player the upcoming songs as an official playlist
+ * (the IFrame API's loadPlaylist), so YouTube moves on to the next song by
+ * itself, the way it does on youtube.com; FLEX follows along (followYouTube).
+ * state.ytList is what the player has loaded:
+ *   { single:true, tracks:[track] }   one video (Repeat One, or a one-song queue)
+ *   { tracks, loop, index }           a playlist: the song that was current when
+ *                                     it was loaded, the ones after it, and (Repeat
+ *                                     All) the ones before it, looping. */
+const YT_LIST_MAX = 200;
+function queuePlan(){
+  const q = state.queue, head = state.currentMeta;
+  if (!q || !head) return null;
+  const sleepAtEnd = state.sleep && state.sleep.option === 'track';
+  if (state.repeatMode === 'one' || sleepAtEnd || q.tracks.length < 2 || typeof state.player.loadPlaylist !== 'function') {
+    return { single: true, tracks: [head] };
+  }
+  const seq = q.order ? q.order.map(id => q.tracks.find(t => t.id === id)).filter(Boolean) : q.tracks.slice();
+  const pos = q.order ? q.orderPos : q.currentIndex;
+  // The playing song may have just been deleted from its playlist; it still
+  // goes first, and the list carries on with the song that followed it.
+  const headIn = !!(seq[pos] && seq[pos].id === head.id);
+  const notHead = t => t.id !== head.id;
+  const after = seq.slice(pos + 1).filter(notHead);
+  const before = state.repeatMode === 'all' ? seq.slice(0, headIn ? pos : pos + 1).filter(notHead) : [];
+  let tracks = [head].concat(after, before);
+  const cut = tracks.length > YT_LIST_MAX;   // very long queues: FLEX loads the next batch at the end
+  if (cut) tracks = tracks.slice(0, YT_LIST_MAX);
+  return { tracks, loop: state.repeatMode === 'all' && !cut };
+}
+// Where in the loaded playlist the plan starts, if the loaded playlist already
+// plays exactly the plan from there on; otherwise -1.
+function planIndexInLoaded(plan){
+  const l = state.ytList;
+  if (!l || l.single || plan.single || l.loop !== plan.loop) return -1;
+  const j = l.tracks.findIndex(t => t.id === plan.tracks[0].id);
+  if (j < 0) return -1;
+  const fromJ = l.loop ? l.tracks.slice(j).concat(l.tracks.slice(0, j)) : l.tracks.slice(j);
+  return fromJ.map(t => t.id).join() === plan.tracks.map(t => t.id).join() ? j : -1;
+}
+// Start (or with cueOnly, just get ready) state.currentMeta through YouTube.
+function loadIntoPlayer(startAt, cueOnly){
+  const plan = queuePlan();
+  if (!plan) return;
+  const p = state.player;
+  const head = plan.tracks[0];
+  state.pendingSeek = null;
+  const j = cueOnly ? -1 : planIndexInLoaded(plan);
+  if (j >= 0) {
+    // Already loaded (e.g. ▶▶ / ◀◀): just jump there in YouTube's playlist.
+    state.ytList.index = j;
+    if (startAt) state.pendingSeek = { id: head.id, t: startAt };
+    p.playVideoAt(j);
+    return;
+  }
+  if (plan.single) {
+    if (cueOnly) p.cueVideoById({ videoId: head.videoId, startSeconds: startAt || 0 });
+    else p.loadVideoById(startAt ? { videoId: head.videoId, startSeconds: startAt } : head.videoId);
+    state.ytList = { single: true, tracks: [head] };
+    return;
+  }
+  const ids = plan.tracks.map(t => t.videoId);
+  if (cueOnly) p.cuePlaylist(ids, 0, startAt || 0); else p.loadPlaylist(ids, 0, startAt || 0);
+  try { p.setLoop(plan.loop); } catch (e) {}
+  state.ytList = { tracks: plan.tracks, loop: plan.loop, index: 0 };
+}
+// After the queue changes (playlist edited, Shuffle or Repeat changed), give
+// YouTube the new upcoming songs, keeping the spot in the current one.
+function refreshYouTubeList(){
+  if (!state.ytReady || !state.ytList || !state.queue || !state.currentMeta || state.off) return;
+  const plan = queuePlan();
+  if (!plan) return;
+  const l = state.ytList;
+  if (plan.single ? (l.single && l.tracks[0].id === plan.tracks[0].id) : planIndexInLoaded(plan) >= 0) return;
+  let t = 0;
+  try { t = state.resumeAt || state.player.getCurrentTime() || 0; } catch (e) {}
+  const playing = state.isPlaying;
+  if (!playing) state.resumeAt = t;
+  loadIntoPlayer(Math.floor(t), !playing);
+}
+// YouTube moved on to another song in its playlist by itself: catch up.
+function followYouTube(e){
+  const l = state.ytList;
+  if (!l || l.single || e.data === YT.PlayerState.ENDED || typeof state.player.getPlaylistIndex !== 'function') return;
+  let j = -1;
+  try { j = state.player.getPlaylistIndex(); } catch (err) {}
+  if (j < 0 || j === l.index || !l.tracks[j]) return;
+  l.index = j;
+  const track = l.tracks[j];
+  const prev = state.currentMeta;
+  if (prev && prev.id === track.id) return;
+  if (prev) forgetPosition(prev.videoId);   // it played to the end
+  const q = state.queue;
+  const i = q.tracks.findIndex(t => t.id === track.id);
+  if (i >= 0) q.currentIndex = i;
+  if (q.order) { const p = q.order.indexOf(track.id); if (p >= 0) q.orderPos = p; }
+  state.currentMeta = track;
+  state.resumeAt = 0;
+  state.duration = 0;
+  state.errorMsg = null;
+  clearTimeout(state.errorSkipTimer);
+  // In a playlist YouTube usually skips the "ended" event and goes straight to
+  // the next video, so this is where FLEX knows it's moving on: keep the lock
+  // screen "playing" and press play if the browser only cues the next song.
+  if (state.sleep && state.sleep.option === 'track') {
+    state.sleep = null;
+    updateSleepBadge();
+    state.autoAdvance = null;
+    state.stopWhenNextStarts = true;
+  } else if (!state.autoAdvance) {
+    state.autoAdvance = { nudges: 0 };
+  }
+  const saved = state.positions[track.videoId];
+  if (saved && saved.t) {
+    state.pendingSeek = { id: track.id, t: saved.t };
+    showToast(`Resuming at ${fmtTime(saved.t)} — ◀◀ to start over`);
+  }
+  addRecent(track);
+  renderNowPlaying();
+  updateMediaSession();
+  saveSession(saved ? saved.t : 0);
 }
 
 // Shown on the Now Playing screen (where the user actually is), and in a
@@ -1680,7 +1835,11 @@ function onPlayerError(e){
   state.errorStreak = (state.errorStreak || 0) + 1;
   if (q && q.tracks.length > 1 && state.repeatMode !== 'one' && state.errorStreak < q.tracks.length) {
     clearTimeout(state.errorSkipTimer);
-    state.errorSkipTimer = setTimeout(() => nextTrack(true), 2500);
+    // Skip only if YouTube hasn't already moved past the broken video itself.
+    const failedId = state.currentMeta && state.currentMeta.id;
+    state.errorSkipTimer = setTimeout(() => {
+      if (!state.currentMeta || state.currentMeta.id === failedId) nextTrack(true);
+    }, 2500);
   }
 }
 
